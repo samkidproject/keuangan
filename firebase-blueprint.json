@@ -1,0 +1,29 @@
+{
+  "entities": {
+    "submissions": {
+      "title": "Submission",
+      "description": "Data pengajuan permohonan BA BUN dari Satker",
+      "properties": {
+        "submissionId": { "type": "string" },
+        "submissionTime": { "type": "string" },
+        "satker": { "type": "string" },
+        "bidang": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileName": { "type": "string" },
+        "status": { "type": "string" },
+        "checklist": { "type": "map" },
+        "auditorRecommendation": { "type": "string" },
+        "auditorNotes": { "type": "string" },
+        "auditorName": { "type": "string" },
+        "verifiedAt": { "type": "string" },
+        "financeStatus": { "type": "string" },
+        "financeNotes": { "type": "string" },
+        "financeProcessedAt": { "type": "string" },
+        "history": { "type": "array" },
+        "source": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["submissionId", "status"]
+    }
+  }
+}
