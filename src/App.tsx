@@ -1,34 +1,61 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { SubmissionItem, UserRole, FilterState, VerificationStatus, AuditChecklist } from './types';
-import { 
-  INITIAL_SUBMISSIONS, 
-  SPREADSHEET_CSV_URL, 
-  parseGoogleSheetsCSV 
-} from './data/initialData';
+import React, { useState, useEffect } from 'react';
+import { SubmissionItem, UserRole, FilterState, VerificationStatus, AuditChecklist, SatkerAccount } from './types';
+import { INITIAL_SUBMISSIONS } from './data/initialData';
+import { INITIAL_SATKER_ACCOUNTS } from './data/initialAccounts';
 import { 
   subscribeToSubmissions, 
-  saveSubmissionToFirestore, 
-  syncSpreadsheetItemsToFirestore 
+  saveSubmissionToFirestore,
+  deleteSubmissionFromFirestore,
+  cleanLegacyDemoItems
 } from './lib/firestoreService';
 import { LoginScreen } from './components/LoginScreen';
 import { Navbar } from './components/Navbar';
 import { StatsCards } from './components/StatsCards';
-import { ColumnBoard } from './components/ColumnBoard';
 import { TableView } from './components/TableView';
+import { ColumnBoard } from './components/ColumnBoard';
 import { AuditorVerifyModal } from './components/AuditorVerifyModal';
 import { FinanceProcessModal } from './components/FinanceProcessModal';
 import { AddSubmissionModal } from './components/AddSubmissionModal';
-import { SyncSheetModal } from './components/SyncSheetModal';
+import { SatkerManagementModal } from './components/SatkerManagementModal';
+import { ReviseSubmissionModal } from './components/ReviseSubmissionModal';
+import { EditSubmissionModal } from './components/EditSubmissionModal';
+import { DeleteConfirmModal } from './components/DeleteConfirmModal';
+import { getWIBTimestamp } from './lib/dateUtils';
 
-const LOCAL_STORAGE_KEY = 'ba_bun_dashboard_submissions_v1';
+const LOCAL_STORAGE_KEY = 'ba_bun_firebase_submissions_v2';
+const LOCAL_STORAGE_ACCOUNTS_KEY = 'ba_bun_satker_accounts_v1';
 
 export default function App() {
   // Authentication & Login State
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [userName, setUserName] = useState<string>('');
+  const [satkerName, setSatkerName] = useState<string>('');
 
-  // Role State: Admin Auditor or Admin Keuangan
-  const [currentRole, setCurrentRole] = useState<UserRole>('auditor');
+  // Role State: Satker, Admin Auditor, or Admin Keuangan
+  const [currentRole, setCurrentRole] = useState<UserRole>('satker');
+
+  // Satker Accounts State (Managed by Admin Keuangan)
+  const [satkerAccounts, setSatkerAccounts] = useState<SatkerAccount[]>(() => {
+    try {
+      const savedAccs = localStorage.getItem(LOCAL_STORAGE_ACCOUNTS_KEY);
+      if (savedAccs) {
+        const parsed = JSON.parse(savedAccs);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error("Failed to load saved accounts:", e);
+    }
+    return INITIAL_SATKER_ACCOUNTS;
+  });
+
+  // Save Accounts to LocalStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_ACCOUNTS_KEY, JSON.stringify(satkerAccounts));
+    } catch (e) {
+      console.error("Failed to save accounts to localStorage:", e);
+    }
+  }, [satkerAccounts]);
 
   // Filter & View Mode
   const [filters, setFilters] = useState<FilterState>({
@@ -40,9 +67,14 @@ export default function App() {
   });
 
   // Handle Login
-  const handleLogin = (role: UserRole, user: string) => {
+  const handleLogin = (role: UserRole, user: string, satkerDisplay?: string) => {
     setCurrentRole(role);
     setUserName(user);
+    if (role === 'satker') {
+      setSatkerName(satkerDisplay || 'Kejari Bandar Lampung');
+    } else {
+      setSatkerName('');
+    }
     setIsLoggedIn(true);
   };
 
@@ -54,28 +86,28 @@ export default function App() {
   // Submissions state
   const [submissions, setSubmissions] = useState<SubmissionItem[]>(() => {
     try {
+      localStorage.removeItem('ba_bun_dashboard_submissions_v1');
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
     } catch (e) {
       console.error("Failed to load saved state:", e);
     }
-    return INITIAL_SUBMISSIONS;
+    return [];
   });
 
   // Modals state
   const [auditorModalItem, setAuditorModalItem] = useState<SubmissionItem | null>(null);
   const [financeModalItem, setFinanceModalItem] = useState<SubmissionItem | null>(null);
+  const [reviseModalItem, setReviseModalItem] = useState<SubmissionItem | null>(null);
+  const [editModalItem, setEditModalItem] = useState<SubmissionItem | null>(null);
+  const [deleteModalItem, setDeleteModalItem] = useState<SubmissionItem | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState<boolean>(false);
-
-  // Sync state
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [lastSynced, setLastSynced] = useState<string | null>("2026-07-27 08:00");
+  const [isSatkerModalOpen, setIsSatkerModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Save to LocalStorage whenever submissions change
@@ -87,13 +119,14 @@ export default function App() {
     }
   }, [submissions]);
 
-  // Real-time Firebase Firestore Listener
+  // Real-time Firebase Firestore Listener & Legacy Clean
   useEffect(() => {
+    // Purge legacy demo data if present in Firebase
+    cleanLegacyDemoItems();
+
     const unsubscribe = subscribeToSubmissions(
       (firestoreItems) => {
-        if (firestoreItems && firestoreItems.length > 0) {
-          setSubmissions(firestoreItems);
-        }
+        setSubmissions(firestoreItems || []);
       },
       (err) => {
         console.warn('Firestore subscription fallback:', err);
@@ -109,32 +142,22 @@ export default function App() {
     }, 4000);
   };
 
-  // Live Sync from Google Sheets CSV into Firebase Firestore
-  const handleSyncGoogleSheets = useCallback(async () => {
-    setIsSyncing(true);
+  const handleDeleteSubmission = async (docId: string, submissionId?: string) => {
     try {
-      const res = await fetch(SPREADSHEET_CSV_URL, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const csvText = await res.text();
-      const parsedItems = parseGoogleSheetsCSV(csvText);
-
-      if (parsedItems.length > 0) {
-        await syncSpreadsheetItemsToFirestore(parsedItems);
-        const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-        setLastSynced(`Hari ini ${timeStr}`);
-        showToast(`Tersambung & disinkronkan dengan Google Sheets & Firebase!`);
-      } else {
-        showToast(`Data Google Sheets berhasil diperiksa.`);
+      if (docId) await deleteSubmissionFromFirestore(docId);
+      if (submissionId && submissionId !== docId) {
+        await deleteSubmissionFromFirestore(submissionId);
       }
-    } catch (err) {
-      console.error("Sync error:", err);
-      showToast(`Menggunakan data Firebase tersimpan. (${err instanceof Error ? err.message : 'Network error'})`);
-    } finally {
-      setIsSyncing(false);
+      setSubmissions(prev => prev.filter(s => s.submissionId !== docId && s.id !== docId && s.submissionId !== submissionId && s.id !== submissionId));
+      showToast(`Pengajuan berhasil dihapus dari database.`);
+    } catch (e) {
+      console.error("Delete error:", e);
+      setSubmissions(prev => prev.filter(s => s.submissionId !== docId && s.id !== docId && s.submissionId !== submissionId && s.id !== submissionId));
+      showToast(`Pengajuan telah dihapus.`);
     }
-  }, []);
+  };
 
-  // Save Auditor Verification & Checklist to Firebase
+  // Save Auditor Verification & Checklist (Finance Admin ONLY approves/processes, doesn't alter auditor recommendation)
   const handleSaveAuditorVerification = async (
     itemId: string,
     status: VerificationStatus,
@@ -143,7 +166,7 @@ export default function App() {
     notes: string,
     auditorName: string
   ) => {
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const now = getWIBTimestamp();
     const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
     if (!targetItem) return;
 
@@ -172,21 +195,21 @@ export default function App() {
 
     try {
       await saveSubmissionToFirestore(updatedItem);
-      showToast(`Rekomendasi Auditor tersimpan di Firebase! Terbaca otomatis di perangkat lain.`);
+      showToast(`Rekomendasi Auditor tersimpan! Terbaca otomatis di portal Satker.`);
     } catch (e) {
       console.error("Firestore save error:", e);
-      showToast(`Tersimpan secara lokal. Gagal menyimpan ke Firebase Firestore.`);
+      showToast(`Tersimpan secara lokal.`);
     }
   };
 
-  // Save Finance Processing to Firebase
+  // Save Finance Processing (Finance Admin ONLY approves/processes, doesn't alter auditor recommendation)
   const handleSaveFinanceProcess = async (
     itemId: string,
     status: VerificationStatus,
     financeStatus: string,
     financeNotes: string
   ) => {
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const now = getWIBTimestamp();
     const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
     if (!targetItem) return;
 
@@ -195,7 +218,7 @@ export default function App() {
       timestamp: now,
       userRole: 'keuangan' as UserRole,
       userName: 'Admin Keuangan BA BUN',
-      action: `Pembaruan Keuangan: "${financeStatus}"`,
+      action: `Persetujuan Keuangan: "${financeStatus}"`,
       note: financeNotes
     };
 
@@ -208,32 +231,122 @@ export default function App() {
       history: [newLog, ...(targetItem.history || [])]
     };
 
-    // Optimistic UI update
     setSubmissions(prev => prev.map(item => (item.id === itemId || item.submissionId === itemId) ? updatedItem : item));
 
     try {
       await saveSubmissionToFirestore(updatedItem);
-      showToast(`Progress Keuangan tersimpan di Firebase! SP2D/Proses disetujui.`);
+      showToast(`Persetujuan Keuangan tersimpan! SP2D/Proses disetujui.`);
     } catch (e) {
       console.error("Firestore save error:", e);
       showToast(`Tersimpan secara lokal.`);
     }
   };
 
-  // Add Manual Submission to Firebase
+  // Handle Satker Resubmit Revision
+  const handleSaveRevision = async (
+    itemId: string,
+    fileUrl: string,
+    fileName: string,
+    nominal: number,
+    notesFromSatker: string
+  ) => {
+    const now = getWIBTimestamp();
+    const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
+    if (!targetItem) return;
+
+    const newLog = {
+      id: `log-revise-${Date.now()}`,
+      timestamp: now,
+      userRole: 'satker' as UserRole,
+      userName: satkerName || userName || 'User Satker',
+      action: 'Hasil Perbaikan Dokumen Dikirim Ulang Ke Auditor',
+      note: notesFromSatker || 'Satker telah memperbaiki berkas permohonan.'
+    };
+
+    const updatedItem: SubmissionItem = {
+      ...targetItem,
+      fileUrl,
+      fileName,
+      nominal: nominal || targetItem.nominal,
+      notesFromSatker,
+      status: 'sedang_diperiksa', // Reset to under review for Auditor
+      history: [newLog, ...(targetItem.history || [])]
+    };
+
+    setSubmissions(prev => prev.map(item => (item.id === itemId || item.submissionId === itemId) ? updatedItem : item));
+
+    try {
+      await saveSubmissionToFirestore(updatedItem);
+      showToast(`Dokumen perbaikan berhasil dikirim ke Admin Auditor!`);
+    } catch (e) {
+      console.error("Firestore save error:", e);
+      showToast(`Dokumen tersimpan secara lokal.`);
+    }
+  };
+
+  // Handle Editing Submission Details
+  const handleSaveEditSubmission = async (
+    itemId: string,
+    updatedData: {
+      satker: string;
+      bidang: string;
+      jenisPengajuan: string;
+      nominal: number;
+      fileName: string;
+      fileUrl: string;
+      notesFromSatker: string;
+    }
+  ) => {
+    const now = getWIBTimestamp();
+    const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
+    if (!targetItem) return;
+
+    const newLog = {
+      id: `log-edit-${Date.now()}`,
+      timestamp: now,
+      userRole: currentRole,
+      userName: satkerName || userName || 'User',
+      action: `Data Permohonan Diperbarui/Edit`,
+      note: `Jenis: ${updatedData.jenisPengajuan} | Nominal: Rp ${(updatedData.nominal || 0).toLocaleString('id-ID')}`
+    };
+
+    const updatedItem: SubmissionItem = {
+      ...targetItem,
+      satker: updatedData.satker,
+      bidang: updatedData.bidang,
+      jenisPengajuan: updatedData.jenisPengajuan,
+      nominal: updatedData.nominal,
+      fileName: updatedData.fileName,
+      fileUrl: updatedData.fileUrl,
+      notesFromSatker: updatedData.notesFromSatker,
+      history: [newLog, ...(targetItem.history || [])]
+    };
+
+    setSubmissions(prev => prev.map(item => (item.id === itemId || item.submissionId === itemId) ? updatedItem : item));
+
+    try {
+      await saveSubmissionToFirestore(updatedItem);
+      showToast(`Data permohonan ${updatedData.satker} berhasil diperbarui!`);
+    } catch (e) {
+      console.error("Firestore save error:", e);
+      showToast(`Perubahan tersimpan secara lokal.`);
+    }
+  };
+
+  // Add Satker Entry Submission to Firebase
   const handleAddSubmission = async (newSub: Omit<SubmissionItem, 'id' | 'history'>) => {
     const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
     const created: SubmissionItem = {
       ...newSub,
-      id: `manual-${Date.now()}`,
+      id: `satker-sub-${Date.now()}`,
       history: [
         {
           id: `log-create-${Date.now()}`,
           timestamp: now,
           userRole: currentRole,
-          userName: currentRole === 'auditor' ? 'Admin Auditor' : 'Admin Keuangan',
-          action: 'Pengajuan Baru Diinputkan',
-          note: `Satker ${newSub.satker} - ${newSub.bidang}`
+          userName: satkerName || userName || (currentRole === 'satker' ? 'User Satker' : 'Admin Entry'),
+          action: `Permohonan BA BUN Di-entry oleh ${satkerName || newSub.satker}`,
+          note: `Nominal: Rp ${(newSub.nominal || 0).toLocaleString('id-ID')} | Berkas: ${newSub.fileName}`
         }
       ]
     };
@@ -242,55 +355,47 @@ export default function App() {
 
     try {
       await saveSubmissionToFirestore(created);
-      showToast(`Pengajuan baru untuk ${newSub.satker} tersimpan di Firebase!`);
+      showToast(`Pengajuan ${newSub.satker} berhasil di-entry & tersimpan!`);
     } catch (e) {
       console.error("Firestore save error:", e);
-      showToast(`Ditambahkan secara lokal.`);
+      showToast(`Pengajuan ditambahkan secara lokal.`);
     }
   };
 
-  // Quick move status
-  const handleQuickMoveStatus = async (itemId: string, newStatus: VerificationStatus) => {
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
-    if (!targetItem) return;
-
-    const updatedItem: SubmissionItem = {
-      ...targetItem,
-      status: newStatus,
-      history: [
-        {
-          id: `log-move-${Date.now()}`,
-          timestamp: now,
-          userRole: currentRole,
-          userName: currentRole === 'auditor' ? 'Admin Auditor' : 'Admin Keuangan',
-          action: `Perubahan Status Cepat ke "${newStatus}"`
-        },
-        ...(targetItem.history || [])
-      ]
+  // Satker Account Management Handlers (Admin Keuangan)
+  const handleAddSatkerAccount = (acc: Omit<SatkerAccount, 'id' | 'createdAt'>) => {
+    const newAcc: SatkerAccount = {
+      ...acc,
+      id: `acc-${Date.now()}`,
+      createdAt: new Date().toISOString().slice(0, 16).replace('T', ' ')
     };
+    setSatkerAccounts(prev => [newAcc, ...prev]);
+  };
 
-    setSubmissions(prev => prev.map(item => (item.id === itemId || item.submissionId === itemId) ? updatedItem : item));
+  const handleToggleSatkerAccountStatus = (id: string) => {
+    setSatkerAccounts(prev => prev.map(acc => {
+      if (acc.id === id) {
+        return { ...acc, status: acc.status === 'aktif' ? 'nonaktif' : 'aktif' };
+      }
+      return acc;
+    }));
+  };
 
-    try {
-      await saveSubmissionToFirestore(updatedItem);
-      showToast(`Status tersimpan di Firebase!`);
-    } catch (e) {
-      console.error("Firestore save error:", e);
-    }
+  const handleDeleteSatkerAccount = (id: string) => {
+    setSatkerAccounts(prev => prev.filter(acc => acc.id !== id));
   };
 
   const handleFilterChange = (part: Partial<FilterState>) => {
     setFilters(prev => ({ ...prev, ...part }));
   };
 
-  // Auto sync on initial load
-  useEffect(() => {
-    handleSyncGoogleSheets();
-  }, [handleSyncGoogleSheets]);
-
   if (!isLoggedIn) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return (
+      <LoginScreen 
+        onLogin={handleLogin} 
+        satkerAccounts={satkerAccounts}
+      />
+    );
   }
 
   return (
@@ -312,15 +417,12 @@ export default function App() {
       <Navbar
         currentRole={currentRole}
         userName={userName}
-        onRoleChange={setCurrentRole}
+        satkerName={satkerName}
         onLogout={handleLogout}
         filters={filters}
         onFilterChange={handleFilterChange}
-        onSyncSheet={handleSyncGoogleSheets}
-        isSyncing={isSyncing}
-        lastSynced={lastSynced}
         onOpenAddModal={() => setIsAddModalOpen(true)}
-        onOpenSyncModal={() => setIsSyncModalOpen(true)}
+        onOpenSatkerModal={() => setIsSatkerModalOpen(true)}
         totalItems={submissions.length}
       />
 
@@ -330,15 +432,32 @@ export default function App() {
         {/* Metric KPI Overview */}
         <StatsCards items={submissions} currentRole={currentRole} />
 
-        {/* Single Table View Display */}
-        <TableView
-          items={submissions}
-          currentRole={currentRole}
-          filters={filters}
-          onFilterChange={setFilters}
-          onOpenAuditorModal={(item) => setAuditorModalItem(item)}
-          onOpenFinanceModal={(item) => setFinanceModalItem(item)}
-        />
+        {/* View Display (Column Board or Table View) */}
+        {filters.viewMode === 'column' ? (
+          <ColumnBoard
+            items={submissions}
+            currentRole={currentRole}
+            onOpenAuditorModal={(item) => setAuditorModalItem(item)}
+            onOpenFinanceModal={(item) => setFinanceModalItem(item)}
+            onOpenReviseModal={(item) => setReviseModalItem(item)}
+            onOpenEditModal={(item) => setEditModalItem(item)}
+            onOpenDeleteModal={(item) => setDeleteModalItem(item)}
+            onDeleteSubmission={handleDeleteSubmission}
+          />
+        ) : (
+          <TableView
+            items={submissions}
+            currentRole={currentRole}
+            filters={filters}
+            onFilterChange={setFilters}
+            onOpenAuditorModal={(item) => setAuditorModalItem(item)}
+            onOpenFinanceModal={(item) => setFinanceModalItem(item)}
+            onOpenReviseModal={(item) => setReviseModalItem(item)}
+            onOpenEditModal={(item) => setEditModalItem(item)}
+            onOpenDeleteModal={(item) => setDeleteModalItem(item)}
+            onDeleteSubmission={handleDeleteSubmission}
+          />
+        )}
 
       </main>
 
@@ -346,12 +465,11 @@ export default function App() {
       <footer className="bg-white/90 border-t border-amber-200/80 backdrop-blur-md py-4.5 text-center text-xs text-slate-600 relative z-10 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-800">Sub Bagian Keuangan BA BUN</span>
-            <span className="text-amber-300">•</span>
-            <span>Bagian Anggaran Bendahara Umum Negara</span>
+            <span>Bagian Anggaran Bendahara Umum Negara • Kejati Lampung</span>
           </div>
-          <div className="text-amber-800 font-semibold">
-            Terintegrasi Google Spreadsheet Online Real-Time
+          <div className="text-emerald-800 font-bold flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+            <span>Sistem Database Real-Time & Akses Berkas Link URL</span>
           </div>
         </div>
       </footer>
@@ -368,27 +486,55 @@ export default function App() {
       <FinanceProcessModal
         item={financeModalItem}
         isOpen={!!financeModalItem}
+        currentRole={currentRole}
         onClose={() => setFinanceModalItem(null)}
         onSaveFinanceProcess={handleSaveFinanceProcess}
       />
 
-      {/* Add New Submission Modal */}
+      {/* Satker Resubmit Revision Modal */}
+      <ReviseSubmissionModal
+        item={reviseModalItem}
+        isOpen={!!reviseModalItem}
+        onClose={() => setReviseModalItem(null)}
+        onSaveRevision={handleSaveRevision}
+      />
+
+      {/* Edit Entry Submission Modal */}
+      <EditSubmissionModal
+        item={editModalItem}
+        isOpen={!!editModalItem}
+        onClose={() => setEditModalItem(null)}
+        onSaveEdit={handleSaveEditSubmission}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        item={deleteModalItem}
+        isOpen={!!deleteModalItem}
+        onClose={() => setDeleteModalItem(null)}
+        onConfirmDelete={handleDeleteSubmission}
+      />
+
+      {/* Add New Entry Form Modal */}
       <AddSubmissionModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onAddSubmission={handleAddSubmission}
+        defaultSatkerName={satkerName}
+        currentRole={currentRole}
       />
 
-      {/* Sync Spreadsheet Details Modal */}
-      <SyncSheetModal
-        isOpen={isSyncModalOpen}
-        onClose={() => setIsSyncModalOpen(false)}
-        onSyncNow={handleSyncGoogleSheets}
-        isSyncing={isSyncing}
-        lastSynced={lastSynced}
-        itemsCount={submissions.length}
+      {/* Admin Keuangan Satker Account Management Modal */}
+      <SatkerManagementModal
+        isOpen={isSatkerModalOpen}
+        onClose={() => setIsSatkerModalOpen(false)}
+        accounts={satkerAccounts}
+        onAddAccount={handleAddSatkerAccount}
+        onToggleAccountStatus={handleToggleSatkerAccountStatus}
+        onDeleteAccount={handleDeleteSatkerAccount}
       />
 
     </div>
   );
 }
+

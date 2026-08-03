@@ -1,5 +1,6 @@
 import React from 'react';
 import { SubmissionItem, UserRole, VerificationStatus } from '../types';
+import { formatToWIB } from '../lib/dateUtils';
 import { 
   FileText, 
   ExternalLink, 
@@ -14,7 +15,11 @@ import {
   CheckCheck,
   Building2,
   Tag,
-  MessageSquare
+  MessageSquare,
+  Eye,
+  FileEdit,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 
 interface ColumnBoardProps {
@@ -22,7 +27,11 @@ interface ColumnBoardProps {
   currentRole: UserRole;
   onOpenAuditorModal: (item: SubmissionItem) => void;
   onOpenFinanceModal: (item: SubmissionItem) => void;
-  onQuickMoveStatus: (itemId: string, newStatus: VerificationStatus) => void;
+  onOpenReviseModal?: (item: SubmissionItem) => void;
+  onOpenEditModal?: (item: SubmissionItem) => void;
+  onOpenDeleteModal?: (item: SubmissionItem) => void;
+  onDeleteSubmission?: (id: string, submissionId?: string) => void;
+  onQuickMoveStatus?: (itemId: string, newStatus: VerificationStatus) => void;
 }
 
 interface ColumnConfig {
@@ -40,7 +49,10 @@ export const ColumnBoard: React.FC<ColumnBoardProps> = ({
   currentRole,
   onOpenAuditorModal,
   onOpenFinanceModal,
-  onQuickMoveStatus,
+  onOpenReviseModal,
+  onOpenEditModal,
+  onOpenDeleteModal,
+  onDeleteSubmission,
 }) => {
 
   const columns: ColumnConfig[] = [
@@ -247,41 +259,91 @@ export const ColumnBoard: React.FC<ColumnBoardProps> = ({
                       )}
 
                       {/* Action Buttons based on Role */}
-                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-1.5 flex-wrap">
                         
                         {/* Time Stamp */}
                         <div className="text-[10px] text-slate-500 font-mono">
-                          {item.submissionTime.slice(0, 16)}
+                          {formatToWIB(item.submissionTime)}
                         </div>
 
-                        {/* Button Action */}
-                        {currentRole === 'auditor' ? (
-                          <button
-                            type="button"
-                            onClick={() => onOpenAuditorModal(item)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
-                              item.status === 'direkomendasikan'
-                                ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
-                                : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xs'
-                            }`}
-                          >
-                            <ShieldCheck className="h-3.5 w-3.5" />
-                            <span>{item.status === 'direkomendasikan' ? 'Edit Verifikasi' : 'Periksa & Centang'}</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => onOpenFinanceModal(item)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
-                              item.status === 'direkomendasikan'
-                                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold shadow-xs'
-                                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
-                            }`}
-                          >
-                            <Wallet className="h-3.5 w-3.5" />
-                            <span>{item.status === 'selesai_keuangan' ? 'Detail SP2D' : 'Proses Keuangan'}</span>
-                          </button>
-                        )}
+                        {/* Action Buttons Group */}
+                        <div className="flex items-center gap-1.5 ml-auto">
+                          {currentRole === 'satker' ? (
+                            item.status === 'perlu_perbaikan' && onOpenReviseModal ? (
+                              <button
+                                type="button"
+                                onClick={() => onOpenReviseModal(item)}
+                                className="px-2.5 py-1.5 bg-rose-500 hover:bg-rose-400 text-white font-extrabold rounded-lg text-xs shadow-2xs transition-all flex items-center gap-1 animate-pulse"
+                              >
+                                <FileEdit className="h-3.5 w-3.5" />
+                                <span>Perbaiki</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => onOpenFinanceModal(item)}
+                                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold rounded-lg text-xs transition-colors flex items-center gap-1"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                <span>Detail</span>
+                              </button>
+                            )
+                          ) : currentRole === 'auditor' ? (
+                            <button
+                              type="button"
+                              onClick={() => onOpenAuditorModal(item)}
+                              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                                item.status === 'direkomendasikan'
+                                  ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+                                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xs'
+                              }`}
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              <span>{item.status === 'direkomendasikan' ? 'Edit Verifikasi' : 'Periksa'}</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => onOpenFinanceModal(item)}
+                              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                                item.status === 'direkomendasikan' || item.status === 'selesai_keuangan'
+                                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold shadow-xs'
+                                  : 'bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold shadow-xs'
+                              }`}
+                            >
+                              <Wallet className="h-3.5 w-3.5" />
+                              <span>{item.status === 'selesai_keuangan' ? 'Disetujui' : 'Menyetujui'}</span>
+                            </button>
+                          )}
+
+                          {currentRole === 'satker' && onOpenEditModal && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenEditModal(item)}
+                              className="p-1.5 bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border border-slate-700 rounded-lg transition-colors"
+                              title="Edit Data Permohonan"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+
+                          {(onOpenDeleteModal || onDeleteSubmission) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onOpenDeleteModal) {
+                                  onOpenDeleteModal(item);
+                                } else if (onDeleteSubmission) {
+                                  onDeleteSubmission(item.id, item.submissionId);
+                                }
+                              }}
+                              className="p-1.5 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-700 rounded-lg transition-colors cursor-pointer"
+                              title="Hapus Pengajuan"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
 
                       </div>
 

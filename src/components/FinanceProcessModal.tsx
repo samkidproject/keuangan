@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SubmissionItem, VerificationStatus } from '../types';
+import { SubmissionItem, UserRole, VerificationStatus } from '../types';
 import { 
   X, 
   Wallet, 
@@ -12,12 +12,14 @@ import {
   Send,
   History,
   CheckCheck,
-  AlertCircle
+  AlertCircle,
+  Eye
 } from 'lucide-react';
 
 interface FinanceProcessModalProps {
   item: SubmissionItem | null;
   isOpen: boolean;
+  currentRole?: UserRole;
   onClose: () => void;
   onSaveFinanceProcess: (
     itemId: string,
@@ -30,6 +32,7 @@ interface FinanceProcessModalProps {
 export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
   item,
   isOpen,
+  currentRole = 'keuangan',
   onClose,
   onSaveFinanceProcess,
 }) => {
@@ -51,11 +54,13 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentRole === 'satker') return; // Satker cannot approve
     // Always set status to 'selesai_keuangan' (approved by finance)
     onSaveFinanceProcess(item.id, 'selesai_keuangan', financeStatus, financeNotes);
     onClose();
   };
 
+  const isSatker = currentRole === 'satker';
   const checklistCount = Object.values(item.checklist).filter(Boolean).length;
 
   const formatCurrency = (val: number) => {
@@ -75,17 +80,19 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
         <div className="p-4 bg-yellow-50 border-b border-yellow-200 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-yellow-500 text-slate-950 font-bold">
-              <Wallet className="h-5 w-5" />
+              {isSatker ? <Eye className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
             </div>
             <div>
               <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <span>Proses Keuangan & SP2D BA BUN</span>
+                <span>{isSatker ? 'Detail Status & Pemantauan Permohonan' : 'Proses Keuangan & SP2D BA BUN'}</span>
                 <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-yellow-100 text-yellow-900 border border-yellow-300">
-                  Admin Keuangan Mode
+                  {isSatker ? 'Satker Pemohon Mode' : 'Admin Keuangan Mode'}
                 </span>
               </h3>
               <p className="text-xs text-slate-600 font-medium">
-                Menindaklanjuti data rekomendasi verifikasi dari Admin Auditor
+                {isSatker 
+                  ? 'Status rekomendasi verifikasi auditor dan persetujuan pengelola keuangan'
+                  : 'Menindaklanjuti data rekomendasi verifikasi dari Admin Auditor'}
               </p>
             </div>
           </div>
@@ -180,49 +187,67 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
             )}
           </div>
 
-          {/* Finance Actions Form */}
-          <div className="space-y-3 pt-2">
-            <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex items-center justify-between">
-              <div>
-                <span className="block text-[10px] font-extrabold text-slate-600 uppercase tracking-wider">
-                  Tindakan Persetujuan Keuangan
-                </span>
-                <span className="font-black text-xs text-emerald-900 flex items-center gap-1.5 mt-0.5">
-                  <CheckCheck className="h-4 w-4 text-emerald-600" />
-                  Persetujuan & Penerbitan SP2D BA BUN
+          {/* Finance Status Info (Read-only for Satker OR Form for Finance Admin) */}
+          {isSatker ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+              <span className="block text-[10px] font-extrabold text-slate-600 uppercase tracking-wider">
+                Status Persetujuan Pengelola Keuangan:
+              </span>
+              <div className="font-bold text-xs text-slate-900 flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-emerald-600" />
+                <span>{item.financeStatus || (item.status === 'selesai_keuangan' ? 'SP2D Terbit / Disetujui' : 'Dalam Proses Pemantauan')}</span>
+              </div>
+              {item.financeNotes && (
+                <div className="text-[11px] text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200 italic">
+                  Catatan Keuangan: "{item.financeNotes}"
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Finance Actions Form for Admin Keuangan */
+            <div className="space-y-3 pt-2">
+              <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <span className="block text-[10px] font-extrabold text-slate-600 uppercase tracking-wider">
+                    Tindakan Persetujuan Keuangan
+                  </span>
+                  <span className="font-black text-xs text-emerald-900 flex items-center gap-1.5 mt-0.5">
+                    <CheckCheck className="h-4 w-4 text-emerald-600" />
+                    Persetujuan & Penerbitan SP2D BA BUN
+                  </span>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 font-black text-[11px] border border-emerald-300">
+                  Disetujui (ACC)
                 </span>
               </div>
-              <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 font-black text-[11px] border border-emerald-300">
-                Disetujui (ACC)
-              </span>
-            </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-900 mb-1">
-                Status Keterangan SP2D / KPPN:
-              </label>
-              <input
-                type="text"
-                value={financeStatus}
-                onChange={(e) => setFinanceStatus(e.target.value)}
-                placeholder="Contoh: SP2D No. 00982/SP2D/BA-BUN/2026 Terbit"
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
-            </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-900 mb-1">
+                  Status Keterangan SP2D / KPPN:
+                </label>
+                <input
+                  type="text"
+                  value={financeStatus}
+                  onChange={(e) => setFinanceStatus(e.target.value)}
+                  placeholder="Contoh: SP2D No. 00982/SP2D/BA-BUN/2026 Terbit"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-900 mb-1">
-                Catatan Pengelola Keuangan BA BUN:
-              </label>
-              <textarea
-                rows={2}
-                value={financeNotes}
-                onChange={(e) => setFinanceNotes(e.target.value)}
-                placeholder="Catatan transfer pencairan atau nomor referensi SP2D..."
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs text-slate-900 font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
+              <div>
+                <label className="block text-xs font-bold text-slate-900 mb-1">
+                  Catatan Pengelola Keuangan BA BUN:
+                </label>
+                <textarea
+                  rows={2}
+                  value={financeNotes}
+                  onChange={(e) => setFinanceNotes(e.target.value)}
+                  placeholder="Catatan transfer pencairan atau nomor referensi SP2D..."
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs text-slate-900 font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Audit Trail History */}
           {item.history && item.history.length > 0 && (
@@ -253,15 +278,17 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
             >
-              Batal
+              {isSatker ? 'Tutup' : 'Batal'}
             </button>
-            <button
-              type="submit"
-              className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs shadow-2xs transition-all flex items-center gap-1.5"
-            >
-              <CheckCheck className="h-4 w-4" />
-              <span>Proses Setuju / ACC</span>
-            </button>
+            {!isSatker && (
+              <button
+                type="submit"
+                className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs shadow-2xs transition-all flex items-center gap-1.5"
+              >
+                <CheckCheck className="h-4 w-4" />
+                <span>Proses Setuju / ACC</span>
+              </button>
+            )}
           </div>
 
         </form>
@@ -270,3 +297,4 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
     </div>
   );
 };
+

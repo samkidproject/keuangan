@@ -1,4 +1,4 @@
-export type UserRole = 'auditor' | 'keuangan';
+export type UserRole = 'satker' | 'auditor' | 'keuangan';
 
 export type VerificationStatus = 
   | 'belum_diperiksa'
@@ -25,6 +25,15 @@ export interface HistoryLog {
   note?: string;
 }
 
+export interface SatkerAccount {
+  id: string;
+  username: string;
+  satkerName: string;
+  bidangDefault?: string;
+  status: 'aktif' | 'nonaktif';
+  createdAt: string;
+}
+
 export interface SubmissionItem {
   id: string;
   submissionId: string;
@@ -44,8 +53,10 @@ export interface SubmissionItem {
   financeStatus?: string;
   financeNotes?: string;
   financeProcessedAt?: string;
+  createdBySatkerUser?: string;
+  notesFromSatker?: string;
   history: HistoryLog[];
-  source: 'google_sheets' | 'manual';
+  source: 'firebase' | 'manual' | 'satker_entry';
 }
 
 export interface FilterState {

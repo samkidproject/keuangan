@@ -2,6 +2,7 @@ import {
   collection, 
   doc, 
   setDoc, 
+  deleteDoc,
   onSnapshot, 
   getDocs,
   writeBatch
@@ -71,81 +72,48 @@ export async function saveSubmissionToFirestore(item: SubmissionItem) {
   }
 }
 
-// Batch save or merge multiple submissions in Firestore
-export async function syncSpreadsheetItemsToFirestore(parsedItems: Partial<SubmissionItem>[]) {
+// Delete a single submission from Firestore
+export async function deleteSubmissionFromFirestore(docId: string) {
+  try {
+    const docRef = doc(db, SUBMISSIONS_COLLECTION, docId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.error('Failed to delete submission from Firestore:', err);
+    throw err;
+  }
+}
+
+// Clean legacy sample items from Firestore if present
+export async function cleanLegacyDemoItems() {
   try {
     const colRef = collection(db, SUBMISSIONS_COLLECTION);
-    const existingSnapshot = await getDocs(colRef);
-    const existingMap = new Map<string, SubmissionItem>();
-    
-    existingSnapshot.forEach((docSnap) => {
-      const data = docSnap.data() as SubmissionItem;
-      if (data && data.submissionId) {
-        existingMap.set(data.submissionId, data);
-      }
-    });
+    const snapshot = await getDocs(colRef);
+    const legacyIds = [
+      '7298c5b3-21e7-4036-b83b-9bd0ee41b310',
+      'sub-fb-1',
+      'sub-sheet-1',
+      'sub-sheet-1-7298c5b3-21e7-4036-b83b-9bd0ee41b310'
+    ];
 
     const batch = writeBatch(db);
     let count = 0;
 
-    for (let idx = 0; idx < parsedItems.length; idx++) {
-      const newItem = parsedItems[idx];
-      const subId = newItem.submissionId || `sheet-row-${idx}`;
-      const existing = existingMap.get(subId);
-
-      const docRef = doc(db, SUBMISSIONS_COLLECTION, subId);
-
-      if (existing) {
-        // Merge Google Sheets metadata without overwriting existing auditor status & verifications
-        const updatedDoc = cleanForFirestore({
-          ...existing,
-          submissionTime: newItem.submissionTime || existing.submissionTime,
-          satker: newItem.satker || existing.satker,
-          bidang: newItem.bidang || existing.bidang,
-          fileUrl: newItem.fileUrl || existing.fileUrl,
-          fileName: newItem.fileName || existing.fileName,
-          updatedAt: new Date().toISOString()
-        });
-        batch.set(docRef, updatedDoc, { merge: true });
-      } else {
-        // Insert new submission document
-        const newDoc: SubmissionItem = {
-          id: `sheet-${Date.now()}-${idx}`,
-          submissionId: subId,
-          submissionTime: newItem.submissionTime || new Date().toISOString().slice(0, 19).replace('T', ' '),
-          satker: newItem.satker || '-',
-          bidang: newItem.bidang || '-',
-          fileUrl: newItem.fileUrl || '',
-          fileName: newItem.fileName || 'Dokumen.pdf',
-          status: 'belum_diperiksa',
-          checklist: {
-            suratPermohonan: false,
-            rincianUP: false,
-            sptjm: false,
-            matriksAkun: false,
-            softcopyPdf: true,
-          },
-          history: [
-            {
-              id: `log-sync-${Date.now()}-${idx}`,
-              timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-              userRole: 'keuangan',
-              userName: 'Google Sheets & Firebase Sync',
-              action: 'Disinkronkan dari Google Spreadsheet & Tersimpan di Firebase'
-            }
-          ],
-          source: 'google_sheets'
-        };
-        batch.set(docRef, cleanForFirestore({ ...newDoc, updatedAt: new Date().toISOString() }));
+    snapshot.forEach((docSnap) => {
+      const id = docSnap.id;
+      const data = docSnap.data() as SubmissionItem;
+      if (legacyIds.includes(id) || legacyIds.includes(data.submissionId) || (data as any).source === 'google_sheets') {
+        batch.delete(docSnap.ref);
+        count++;
       }
-      count++;
-    }
+    });
 
     if (count > 0) {
       await batch.commit();
+      console.log(`Cleaned ${count} legacy demo document(s) from Firestore.`);
     }
   } catch (err) {
-    console.error('Failed to sync spreadsheet items to Firestore:', err);
-    throw err;
+    console.warn("Legacy cleanup error:", err);
   }
 }
+
+
