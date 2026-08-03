@@ -89,8 +89,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* User Account Controls & Actions */}
           <div className="flex flex-wrap items-center gap-2">
             
-            {/* Entry Form Button for Satker or Keuangan */}
-            {(currentRole === 'satker' || currentRole === 'keuangan') && onOpenAddModal && (
+            {/* Entry Form Button ONLY for Satker */}
+            {currentRole === 'satker' && onOpenAddModal && (
               <button
                 type="button"
                 onClick={onOpenAddModal}

@@ -8,9 +8,10 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { SubmissionItem } from '../types';
+import { SubmissionItem, SatkerAccount } from '../types';
 
 const SUBMISSIONS_COLLECTION = 'submissions';
+const ACCOUNTS_COLLECTION = 'satker_accounts';
 
 // Helper to remove undefined fields before saving to Firestore
 function cleanForFirestore(obj: any): any {
@@ -29,7 +30,7 @@ function cleanForFirestore(obj: any): any {
   return obj;
 }
 
-// Subscribe to real-time updates from Firestore
+// Subscribe to real-time updates from Firestore for Submissions
 export function subscribeToSubmissions(
   onData: (submissions: SubmissionItem[]) => void,
   onError?: (err: Error) => void
@@ -50,10 +51,70 @@ export function subscribeToSubmissions(
       onData(items);
     },
     (err) => {
-      console.error('Firestore subscription error:', err);
+      console.error('Firestore submission subscription error:', err);
       if (onError) onError(err);
     }
   );
+}
+
+// Subscribe to real-time updates from Firestore for Satker Accounts
+export function subscribeToSatkerAccounts(
+  onData: (accounts: SatkerAccount[]) => void,
+  onError?: (err: Error) => void
+) {
+  const colRef = collection(db, ACCOUNTS_COLLECTION);
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const items: SatkerAccount[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as SatkerAccount;
+        if (data && data.username) {
+          items.push(data);
+        }
+      });
+      onData(items);
+    },
+    (err) => {
+      console.error('Firestore accounts subscription error:', err);
+      if (onError) onError(err);
+    }
+  );
+}
+
+// Save or sync Satker Accounts to Firestore
+export async function saveSatkerAccountToFirestore(account: SatkerAccount) {
+  try {
+    const docId = account.id || account.username;
+    const docRef = doc(db, ACCOUNTS_COLLECTION, docId);
+    await setDoc(docRef, cleanForFirestore(account), { merge: true });
+  } catch (err) {
+    console.error('Failed to save account to Firestore:', err);
+  }
+}
+
+export async function saveAllSatkerAccountsToFirestore(accounts: SatkerAccount[]) {
+  try {
+    const batch = writeBatch(db);
+    for (const acc of accounts) {
+      const docId = acc.id || acc.username;
+      const docRef = doc(db, ACCOUNTS_COLLECTION, docId);
+      batch.set(docRef, cleanForFirestore(acc), { merge: true });
+    }
+    await batch.commit();
+  } catch (err) {
+    console.error('Failed to save all accounts to Firestore:', err);
+  }
+}
+
+// Delete Satker Account from Firestore
+export async function deleteSatkerAccountFromFirestore(accountId: string) {
+  try {
+    const docRef = doc(db, ACCOUNTS_COLLECTION, accountId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.error('Failed to delete account from Firestore:', err);
+  }
 }
 
 // Save or merge a single submission in Firestore

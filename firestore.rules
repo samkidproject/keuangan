@@ -4,5 +4,8 @@ service cloud.firestore {
     match /submissions/{submissionId} {
       allow read, write: if true;
     }
+    match /satker_accounts/{accountId} {
+      allow read, write: if true;
+    }
   }
 }

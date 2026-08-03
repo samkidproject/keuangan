@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { SatkerAccount } from '../types';
+import { formatWhatsAppLink, formatDisplayPhone } from '../lib/contactUtils';
 import { 
   Users, 
   X, 
@@ -10,7 +11,10 @@ import {
   XCircle, 
   Trash2, 
   Search, 
-  Key
+  Key,
+  User,
+  Phone,
+  MessageSquare
 } from 'lucide-react';
 
 interface SatkerManagementModalProps {
@@ -36,7 +40,8 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
   // New account form state
   const [satkerName, setSatkerName] = useState('');
   const [username, setUsername] = useState('');
-  const [bidangDefault, setBidangDefault] = useState('Pembinaan');
+  const [namaPetugas, setNamaPetugas] = useState('');
+  const [whatsappNumber, setWhatsappNumber] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
   if (!isOpen) return null;
@@ -50,13 +55,16 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
     onAddAccount({
       satkerName: satkerName.trim(),
       username: formattedUsername,
-      bidangDefault,
+      namaPetugas: namaPetugas.trim() || undefined,
+      whatsappNumber: whatsappNumber.trim() || undefined,
       status: 'aktif',
     });
 
     setSuccessMsg(`Akun Satker "${satkerName}" (${formattedUsername}) berhasil dibuat!`);
     setSatkerName('');
     setUsername('');
+    setNamaPetugas('');
+    setWhatsappNumber('');
     setTimeout(() => {
       setSuccessMsg('');
       setActiveTab('list');
@@ -65,7 +73,9 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
 
   const filteredAccounts = accounts.filter(acc => 
     acc.satkerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    acc.username.toLowerCase().includes(searchTerm.toLowerCase())
+    acc.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (acc.namaPetugas && acc.namaPetugas.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (acc.whatsappNumber && acc.whatsappNumber.includes(searchTerm))
   );
 
   return (
@@ -172,17 +182,35 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
                               {acc.status === 'aktif' ? 'Aktif' : 'Non-Aktif'}
                             </span>
                           </div>
-                          <div className="text-[11px] font-mono text-slate-600 mt-0.5 flex items-center gap-2">
+                          <div className="text-[11px] font-mono text-slate-600 mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span className="flex items-center gap-1 font-semibold text-amber-800">
                               <Key className="h-3 w-3" />
                               Username: <strong>{acc.username}</strong>
                             </span>
-                            <span>• Bidang: {acc.bidangDefault || 'Pembinaan'}</span>
+
+                            {acc.namaPetugas && (
+                              <span className="flex items-center gap-1 font-semibold text-slate-700">
+                                <User className="h-3 w-3 text-slate-500" />
+                                Petugas: <strong>{acc.namaPetugas}</strong>
+                              </span>
+                            )}
+
+                            {acc.whatsappNumber && (
+                              <a
+                                href={formatWhatsAppLink(acc.whatsappNumber, `Halo Bpk/Ibu ${acc.namaPetugas || ''} dari ${acc.satkerName}, terkait koordinasi pengajuan BA BUN.`)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 transition-colors"
+                              >
+                                <MessageSquare className="h-3 w-3 text-emerald-600" />
+                                <span>WA: {formatDisplayPhone(acc.whatsappNumber)}</span>
+                              </a>
+                            )}
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
                           onClick={() => onToggleAccountStatus(acc.id)}
@@ -250,6 +278,35 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">
+                    Nama Petugas / Operator Satker
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Bpk. Ahmad Hidayat, S.H."
+                    value={namaPetugas}
+                    onChange={(e) => setNamaPetugas(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1 flex items-center gap-1">
+                    <Phone className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Nomor WhatsApp Contact</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: 081234567890"
+                    value={whatsappNumber}
+                    onChange={(e) => setWhatsappNumber(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-slate-800 mb-1">
                   Username Login Satker *
@@ -265,24 +322,6 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
                 <p className="text-[10px] text-slate-500 mt-1">
                   *Gunakan huruf kecil tanpa spasi. User akan menggunakan username ini untuk masuk portal.
                 </p>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-800 mb-1">
-                  Bidang Utama / Sub Bagian Default
-                </label>
-                <select
-                  value={bidangDefault}
-                  onChange={(e) => setBidangDefault(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                >
-                  <option value="Pembinaan">Pembinaan (Subbagian Keuangan/Umum)</option>
-                  <option value="Intelijen">Intelijen</option>
-                  <option value="Pidum">Tindak Pidana Umum (Pidum)</option>
-                  <option value="Pidsus">Tindak Pidana Khusus (Pidsus)</option>
-                  <option value="Datun">Datun</option>
-                  <option value="PB3R">PB3R</option>
-                </select>
               </div>
 
               <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">

@@ -34,20 +34,31 @@ export const AddSubmissionModal: React.FC<AddSubmissionModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleNominalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value.replace(/\D/g, '');
+    if (!rawVal) {
+      setNominal('');
+    } else {
+      const formatted = new Intl.NumberFormat('id-ID').format(parseInt(rawVal, 10));
+      setNominal(formatted);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const subId = `sub-satker-${Date.now()}`;
     const now = getWIBTimestamp();
+    const numericNominal = parseFloat(nominal.replace(/\./g, '')) || 0;
 
     onAddSubmission({
       submissionId: subId,
       submissionTime: now,
       satker: satker.trim(),
       bidang,
-      fileName: fileName.trim() || 'Dokumen_Permohonan.pdf',
+      fileName: fileName.trim() || (jenisPengajuan ? `Dokumen_${jenisPengajuan}.pdf` : 'Dokumen_Permohonan_BA_BUN.pdf'),
       fileUrl: fileUrl.trim(),
       jenisPengajuan,
-      nominal: parseFloat(nominal) || 0,
+      nominal: numericNominal,
       notesFromSatker,
       createdBySatkerUser: defaultSatkerName || satker,
       status: 'belum_diperiksa',
@@ -141,7 +152,7 @@ export const AddSubmissionModal: React.FC<AddSubmissionModalProps> = ({
                 onChange={(e) => setBidang(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
               >
-                <option value="Pembinaan">Pembinaan (Subbagian Keuangan/Umum)</option>
+                <option value="Pembinaan">Pembinaan</option>
                 <option value="Intelijen">Intelijen</option>
                 <option value="Pidum">Tindak Pidana Umum (Pidum)</option>
                 <option value="Pidsus">Tindak Pidana Khusus (Pidsus)</option>
@@ -170,27 +181,18 @@ export const AddSubmissionModal: React.FC<AddSubmissionModalProps> = ({
               Nominal Permohonan Anggaran (Rp):
             </label>
             <input
-              type="number"
-              required
-              value={nominal}
-              onChange={(e) => setNominal(e.target.value)}
-              placeholder="Contoh: 500000000"
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-emerald-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1">
-              Nama Berkas Dokumen PDF / Permohonan:
-            </label>
-            <input
               type="text"
               required
-              value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
-              placeholder="Contoh: Surat-Permohonan-Persetujuan-UP-BA-BUN.pdf"
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              value={nominal}
+              onChange={handleNominalChange}
+              placeholder="Contoh: 5.000.000"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-emerald-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
+            {nominal && (
+              <p className="mt-1 text-[11px] font-bold text-emerald-700">
+                Terbaca: Rp {nominal}
+              </p>
+            )}
           </div>
 
           <div>

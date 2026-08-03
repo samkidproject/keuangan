@@ -42,13 +42,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         }
         setErrorMsg('');
         onLogin('satker', matchedAccount.username, matchedAccount.satkerName);
-      } else if (trimmed.startsWith('kejari.') || trimmed.includes('kejari')) {
-        // Fallback for Satker login
-        const autoSatkerName = trimmed.replace('kejari.', 'Kejari ').replace(/\b\w/g, c => c.toUpperCase());
-        setErrorMsg('');
-        onLogin('satker', trimmed, autoSatkerName);
       } else {
-        setErrorMsg('Username / NIP tidak terdaftar. Gunakan akun Satker (contoh: kejari.bandarlampung), auditor.kejati, atau keuangan.babun');
+        setErrorMsg('Username tidak terdaftar. Hubungi Admin Keuangan untuk pendaftaran akun Satker.');
       }
     }
   };

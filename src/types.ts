@@ -29,6 +29,8 @@ export interface SatkerAccount {
   id: string;
   username: string;
   satkerName: string;
+  namaPetugas?: string;
+  whatsappNumber?: string;
   bidangDefault?: string;
   status: 'aktif' | 'nonaktif';
   createdAt: string;
@@ -44,6 +46,8 @@ export interface SubmissionItem {
   fileName: string;
   jenisPengajuan?: string;
   nominal?: number;
+  namaPetugas?: string;
+  whatsappNumber?: string;
   status: VerificationStatus;
   checklist: AuditChecklist;
   auditorRecommendation?: string;

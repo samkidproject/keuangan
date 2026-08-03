@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { SubmissionItem, UserRole, FilterState, VerificationStatus, AuditChecklist, SatkerAccount } from './types';
 import { INITIAL_SUBMISSIONS } from './data/initialData';
-import { INITIAL_SATKER_ACCOUNTS } from './data/initialAccounts';
 import { 
   subscribeToSubmissions, 
   saveSubmissionToFirestore,
   deleteSubmissionFromFirestore,
-  cleanLegacyDemoItems
+  cleanLegacyDemoItems,
+  subscribeToSatkerAccounts,
+  saveSatkerAccountToFirestore,
+  deleteSatkerAccountFromFirestore
 } from './lib/firestoreService';
 import { LoginScreen } from './components/LoginScreen';
 import { Navbar } from './components/Navbar';
@@ -40,12 +42,12 @@ export default function App() {
       const savedAccs = localStorage.getItem(LOCAL_STORAGE_ACCOUNTS_KEY);
       if (savedAccs) {
         const parsed = JSON.parse(savedAccs);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {
       console.error("Failed to load saved accounts:", e);
     }
-    return INITIAL_SATKER_ACCOUNTS;
+    return [];
   });
 
   // Save Accounts to LocalStorage
@@ -124,7 +126,7 @@ export default function App() {
     // Purge legacy demo data if present in Firebase
     cleanLegacyDemoItems();
 
-    const unsubscribe = subscribeToSubmissions(
+    const unsubscribeSubmissions = subscribeToSubmissions(
       (firestoreItems) => {
         setSubmissions(firestoreItems || []);
       },
@@ -132,7 +134,20 @@ export default function App() {
         console.warn('Firestore subscription fallback:', err);
       }
     );
-    return () => unsubscribe();
+
+    const unsubscribeAccounts = subscribeToSatkerAccounts(
+      (firestoreAccounts) => {
+        setSatkerAccounts(firestoreAccounts || []);
+      },
+      (err) => {
+        console.warn('Firestore accounts subscription fallback:', err);
+      }
+    );
+
+    return () => {
+      unsubscribeSubmissions();
+      unsubscribeAccounts();
+    };
   }, []);
 
   const showToast = (msg: string) => {
@@ -363,26 +378,36 @@ export default function App() {
   };
 
   // Satker Account Management Handlers (Admin Keuangan)
-  const handleAddSatkerAccount = (acc: Omit<SatkerAccount, 'id' | 'createdAt'>) => {
+  const handleAddSatkerAccount = async (acc: Omit<SatkerAccount, 'id' | 'createdAt'>) => {
     const newAcc: SatkerAccount = {
       ...acc,
       id: `acc-${Date.now()}`,
-      createdAt: new Date().toISOString().slice(0, 16).replace('T', ' ')
+      createdAt: getWIBTimestamp()
     };
     setSatkerAccounts(prev => [newAcc, ...prev]);
+    await saveSatkerAccountToFirestore(newAcc);
+    showToast(`Akun ${newAcc.satkerName} (${newAcc.username}) berhasil ditambahkan!`);
   };
 
-  const handleToggleSatkerAccountStatus = (id: string) => {
-    setSatkerAccounts(prev => prev.map(acc => {
-      if (acc.id === id) {
-        return { ...acc, status: acc.status === 'aktif' ? 'nonaktif' : 'aktif' };
-      }
-      return acc;
-    }));
+  const handleToggleSatkerAccountStatus = async (id: string) => {
+    const target = satkerAccounts.find(acc => acc.id === id);
+    if (!target) return;
+    const updated: SatkerAccount = {
+      ...target,
+      status: target.status === 'aktif' ? 'nonaktif' : 'aktif'
+    };
+    setSatkerAccounts(prev => prev.map(acc => (acc.id === id ? updated : acc)));
+    await saveSatkerAccountToFirestore(updated);
+    showToast(`Status akun ${target.satkerName} diubah ke ${updated.status}.`);
   };
 
-  const handleDeleteSatkerAccount = (id: string) => {
+  const handleDeleteSatkerAccount = async (id: string) => {
+    const target = satkerAccounts.find(acc => acc.id === id);
     setSatkerAccounts(prev => prev.filter(acc => acc.id !== id));
+    await deleteSatkerAccountFromFirestore(id);
+    if (target) {
+      showToast(`Akun ${target.satkerName} berhasil dihapus.`);
+    }
   };
 
   const handleFilterChange = (part: Partial<FilterState>) => {

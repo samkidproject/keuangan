@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { SubmissionItem, VerificationStatus, AuditChecklist } from '../types';
+import { SubmissionItem, VerificationStatus, AuditChecklist, SatkerAccount } from '../types';
+import { formatWhatsAppLink, formatDisplayPhone } from '../lib/contactUtils';
 import { 
   X, 
   ShieldCheck, 
@@ -12,13 +13,17 @@ import {
   Building2, 
   UserCheck,
   Send,
-  Sparkles
+  Sparkles,
+  MessageSquare,
+  Phone,
+  User
 } from 'lucide-react';
 
 interface AuditorVerifyModalProps {
   item: SubmissionItem | null;
   isOpen: boolean;
   onClose: () => void;
+  satkerAccounts?: SatkerAccount[];
   onSaveVerification: (
     itemId: string,
     status: VerificationStatus,
@@ -33,9 +38,18 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
   item,
   isOpen,
   onClose,
+  satkerAccounts = [],
   onSaveVerification,
 }) => {
   if (!isOpen || !item) return null;
+
+  const matchedAcc = satkerAccounts.find(
+    a => a.satkerName.toLowerCase() === item.satker.toLowerCase() ||
+         a.username.toLowerCase() === item.createdBySatkerUser?.toLowerCase()
+  );
+
+  const contactName = item.namaPetugas || matchedAcc?.namaPetugas;
+  const contactWA = item.whatsappNumber || matchedAcc?.whatsappNumber;
 
   const [status, setStatus] = useState<VerificationStatus>(item.status || 'direkomendasikan');
   const [checklist, setChecklist] = useState<AuditChecklist>(item.checklist || {
@@ -178,6 +192,37 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
                   <ExternalLink className="h-3.5 w-3.5" />
                   <span>Buka PDF Dokumen</span>
                 </a>
+              )}
+            </div>
+
+            {/* WhatsApp Contact Officer Info */}
+            <div className="pt-2 border-t border-amber-200 flex flex-wrap items-center justify-between gap-2 bg-emerald-50/90 p-2.5 rounded-lg border border-emerald-300 text-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-500 text-white font-bold">
+                  <User className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-extrabold text-emerald-900 uppercase tracking-wider block">Contact Petugas / Operator Satker:</span>
+                  <span className="text-xs font-black text-slate-900">
+                    {contactName || 'Petugas Operator Satker'} {contactWA ? `• ${formatDisplayPhone(contactWA)}` : ''}
+                  </span>
+                </div>
+              </div>
+
+              {contactWA ? (
+                <a
+                  href={formatWhatsAppLink(contactWA, `Halo Bpk/Ibu ${contactName || ''} (${item.satker}), terkait verifikasi pengajuan BA BUN ${item.submissionId}.`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-lg text-xs flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  <span>Hubungi via WhatsApp</span>
+                </a>
+              ) : (
+                <span className="text-[10px] text-amber-800 font-bold bg-amber-100 border border-amber-200 px-2 py-0.5 rounded">
+                  Nomor WhatsApp belum diset di Akun Satker
+                </span>
               )}
             </div>
           </div>
