@@ -14,7 +14,9 @@ import {
   FileEdit,
   Eye,
   Trash2,
-  Pencil
+  Pencil,
+  FileCheck,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface TableViewProps {
@@ -24,6 +26,7 @@ interface TableViewProps {
   onFilterChange: (filters: Partial<FilterState>) => void;
   onOpenAuditorModal: (item: SubmissionItem) => void;
   onOpenFinanceModal: (item: SubmissionItem) => void;
+  onOpenSppModal?: (item: SubmissionItem) => void;
   onOpenReviseModal?: (item: SubmissionItem) => void;
   onOpenEditModal?: (item: SubmissionItem) => void;
   onOpenDeleteModal?: (item: SubmissionItem) => void;
@@ -37,24 +40,35 @@ export const TableView: React.FC<TableViewProps> = ({
   onFilterChange,
   onOpenAuditorModal,
   onOpenFinanceModal,
+  onOpenSppModal,
   onOpenReviseModal,
   onOpenEditModal,
   onOpenDeleteModal,
   onDeleteSubmission,
 }) => {
 
+  // Filter base items for auditor and keuangan roles (strictly only see items with Nota Dinas attached / entered auditor stage)
+  const roleBaseItems = items.filter(item => {
+    if (currentRole === 'auditor' || currentRole === 'keuangan') {
+      return Boolean(item.notaDinasNumber && item.notaDinasNumber.trim());
+    }
+    return true;
+  });
+
   // Get unique Satkers & Bidangs for filters
-  const satkerOptions = Array.from(new Set(items.map(i => i.satker))).sort();
-  const bidangOptions = Array.from(new Set(items.map(i => i.bidang))).sort();
+  const satkerOptions = Array.from(new Set(roleBaseItems.map(i => i.satker))).sort();
+  const bidangOptions = Array.from(new Set(roleBaseItems.map(i => i.bidang))).sort();
 
   // Filter items based on filter state
-  const filteredItems = items.filter(item => {
+  const filteredItems = roleBaseItems.filter(item => {
     const matchesSearch = 
       !filters.search ||
       item.submissionId.toLowerCase().includes(filters.search.toLowerCase()) ||
       item.satker.toLowerCase().includes(filters.search.toLowerCase()) ||
       item.bidang.toLowerCase().includes(filters.search.toLowerCase()) ||
       item.fileName.toLowerCase().includes(filters.search.toLowerCase()) ||
+      (item.notaDinasNumber && item.notaDinasNumber.toLowerCase().includes(filters.search.toLowerCase())) ||
+      (item.sppNumber && item.sppNumber.toLowerCase().includes(filters.search.toLowerCase())) ||
       (item.jenisPengajuan && item.jenisPengajuan.toLowerCase().includes(filters.search.toLowerCase()));
 
     const matchesSatker = !filters.satker || item.satker === filters.satker;
@@ -64,25 +78,25 @@ export const TableView: React.FC<TableViewProps> = ({
     return matchesSearch && matchesSatker && matchesBidang && matchesStatus;
   });
 
-  const getStatusBadge = (status: VerificationStatus) => {
+  const getStatusBadge = (status: VerificationStatus, item: SubmissionItem) => {
     switch (status) {
       case 'belum_diperiksa':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-900 border border-amber-300 inline-flex items-center gap-1">
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-950 border border-amber-300 inline-flex items-center gap-1 shadow-2xs">
             <Clock className="h-3 w-3 text-amber-600" />
-            1. Menunggu Auditor
+            1. Verifikasi Keuangan Awal (Nota Dinas)
           </span>
         );
       case 'sedang_diperiksa':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-300 inline-flex items-center gap-1">
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-900 border border-blue-300 inline-flex items-center gap-1">
             <Clock className="h-3 w-3 text-blue-600 animate-spin" />
-            2. Sedang Diperiksa
+            2. Verifikasi Auditor
           </span>
         );
       case 'direkomendasikan':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-900 border border-emerald-300 inline-flex items-center gap-1">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
             3. Direkomendasikan Auditor
           </span>
@@ -97,9 +111,9 @@ export const TableView: React.FC<TableViewProps> = ({
         );
       case 'selesai_keuangan':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-black bg-amber-400 text-slate-950 border border-amber-500 inline-flex items-center gap-1 shadow-2xs">
-            <Wallet className="h-3.5 w-3.5 text-slate-950" />
-            4. SP2D Terbit / Disetujui
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-black bg-emerald-600 text-white border border-emerald-700 inline-flex items-center gap-1 shadow-xs">
+            <Wallet className="h-3.5 w-3.5" />
+            4. Disetujui Keuangan
           </span>
         );
     }
@@ -114,10 +128,11 @@ export const TableView: React.FC<TableViewProps> = ({
 
     return (
       <div className="w-full space-y-1">
-        <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-          <span className={step >= 1 ? 'text-amber-800 font-extrabold' : ''}>Entry</span>
-          <span className={step >= 2 ? 'text-blue-800 font-extrabold' : ''}>Auditor</span>
-          <span className={step >= 4 ? 'text-emerald-800 font-black' : ''}>SP2D</span>
+        <div className="flex items-center justify-between text-[9px] font-extrabold text-slate-500">
+          <span className={step >= 1 ? 'text-amber-800' : ''}>Verif Keu</span>
+          <span className={step >= 2 ? 'text-blue-800' : ''}>Auditor</span>
+          <span className={step >= 3 ? 'text-emerald-700' : ''}>Setuju Keu</span>
+          <span className={step >= 4 ? 'text-emerald-900 font-black' : ''}>SPP</span>
         </div>
         <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200 flex">
           <div className={`h-full transition-all duration-500 ${
@@ -147,7 +162,7 @@ export const TableView: React.FC<TableViewProps> = ({
             <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Cari Satker, Bidang, ID Pengajuan, Nama File PDF..."
+              placeholder="Cari Satker, Bidang, Uraian Pengajuan, Nomor Nota Dinas, Nomor SPP..."
               value={filters.search}
               onChange={(e) => onFilterChange({ search: e.target.value })}
               className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-900 font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-2xs"
@@ -196,19 +211,19 @@ export const TableView: React.FC<TableViewProps> = ({
           {/* Filter Status */}
           <div>
             <label className="block text-[11px] font-bold text-slate-700 mb-1">
-              Filter Status Verifikasi:
+              Filter Status Alur Kerja:
             </label>
             <select
               value={filters.status}
               onChange={(e) => onFilterChange({ status: e.target.value })}
               className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-amber-500"
             >
-              <option value="">Semua Status Verifikasi</option>
-              <option value="belum_diperiksa">Belum Diperiksa Auditor</option>
-              <option value="sedang_diperiksa">Sedang Diperiksa Auditor</option>
-              <option value="direkomendasikan">Diverifikasi & Direkomendasikan Auditor</option>
-              <option value="perlu_perbaikan">Perlu Perbaikan / Revisi</option>
-              <option value="selesai_keuangan">SP2D Terbit / Disetujui Keuangan</option>
+              <option value="">Semua Status Alur Kerja</option>
+              <option value="belum_diperiksa">1. Verifikasi Keuangan Awal (Menunggu Nota Dinas)</option>
+              <option value="sedang_diperiksa">2. Verifikasi Audit Auditor</option>
+              <option value="direkomendasikan">3. Direkomendasikan Auditor &rarr; Persetujuan Keuangan</option>
+              <option value="selesai_keuangan">4. Disetujui Keuangan &rarr; Input SPP Satker</option>
+              <option value="perlu_perbaikan">Perlu Perbaikan / Revisi Satker</option>
             </select>
           </div>
 
@@ -221,19 +236,18 @@ export const TableView: React.FC<TableViewProps> = ({
           <table className="w-full text-left text-xs">
             <thead className="bg-amber-50/90 text-amber-950 uppercase tracking-wider font-black border-b border-amber-200 text-[11px]">
               <tr>
-                <th className="py-4 px-3.5">Submission ID</th>
+                <th className="py-4 px-3.5">Uraian Pengajuan</th>
                 <th className="py-4 px-3.5">Waktu Entry</th>
-                <th className="py-4 px-3.5">Satuan Kerja</th>
-                <th className="py-4 px-3.5">Bidang</th>
-                <th className="py-4 px-3.5">Dokumen Permohonan (PDF)</th>
-                <th className="py-4 px-3.5 min-w-[200px]">Status & Progres Pemeriksaan</th>
-                <th className="py-4 px-3.5 text-right">Aksi</th>
+                <th className="py-4 px-3.5">Satuan Kerja & Bidang</th>
+                <th className="py-4 px-3.5">Berkas Permohonan & Nota Dinas</th>
+                <th className="py-4 px-3.5 min-w-[210px]">Status & Progres Workflow</th>
+                <th className="py-4 px-3.5 text-right">Aksi Workflow</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-slate-500 font-medium">
+                  <td colSpan={6} className="text-center py-12 text-slate-500 font-medium">
                     Tidak ada data pengajuan permohonan yang sesuai.
                   </td>
                 </tr>
@@ -245,16 +259,28 @@ export const TableView: React.FC<TableViewProps> = ({
                       className={`hover:bg-amber-50/50 transition-colors ${
                         item.status === 'direkomendasikan' 
                           ? 'bg-emerald-50/40' 
+                          : item.status === 'selesai_keuangan'
+                          ? 'bg-emerald-50/20'
                           : item.status === 'perlu_perbaikan' 
                           ? 'bg-rose-50/30' 
                           : ''
                       }`}
                     >
-                      {/* Submission ID */}
-                      <td className="py-3.5 px-3.5 font-mono">
-                        <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                          <span className="text-slate-400 font-normal">{idx + 1}.</span>
-                          <span className="text-amber-800 font-bold" title={item.submissionId}>{item.submissionId.slice(0, 14)}...</span>
+                      {/* Uraian Pengajuan */}
+                      <td className="py-3.5 px-3.5 font-sans">
+                        <div className="font-extrabold text-slate-900 flex items-start gap-1.5 max-w-[220px]">
+                          <span className="text-slate-400 font-mono font-normal shrink-0">{idx + 1}.</span>
+                          <div>
+                            <span className="text-amber-950 font-extrabold text-xs leading-snug line-clamp-2" title={item.jenisPengajuan || 'Permohonan Anggaran BA BUN'}>
+                              {item.jenisPengajuan || 'Permohonan Anggaran BA BUN'}
+                            </span>
+                            {item.sppNumber && (
+                              <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-950 border border-emerald-300 text-[10px] font-black">
+                                <FileCheck className="h-3 w-3 text-emerald-700" />
+                                <span>SPP: {item.sppNumber}</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
 
@@ -263,25 +289,22 @@ export const TableView: React.FC<TableViewProps> = ({
                         {formatToWIB(item.submissionTime)}
                       </td>
 
-                      {/* Satuan Kerja */}
+                      {/* Satuan Kerja & Bidang */}
                       <td className="py-3.5 px-3.5">
                         <div className="font-bold text-slate-900 flex items-center gap-1.5">
                           <Building2 className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                           <span>{item.satker}</span>
                         </div>
+                        <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                          Bidang: {item.bidang}
+                        </div>
                       </td>
 
-                      {/* Bidang */}
-                      <td className="py-3.5 px-3.5 font-semibold text-slate-800">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[11px]">
-                          {item.bidang}
-                        </span>
-                      </td>
-
-                      {/* Upload a File */}
-                      <td className="py-3.5 px-3.5">
-                        <div className="flex items-center gap-1.5 max-w-[180px]">
-                          <FileText className="h-4 w-4 text-blue-600 shrink-0" />
+                      {/* Documents & Nota Dinas */}
+                      <td className="py-3.5 px-3.5 space-y-1">
+                        {/* Satker File */}
+                        <div className="flex items-center gap-1.5 max-w-[200px]">
+                          <FileText className="h-3.5 w-3.5 text-blue-600 shrink-0" />
                           <span className="truncate text-slate-800 text-[11px] font-semibold" title={item.fileName}>
                             {item.fileName}
                           </span>
@@ -290,21 +313,36 @@ export const TableView: React.FC<TableViewProps> = ({
                               href={item.fileUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 p-1 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors shrink-0"
-                              title="Buka Dokumen PDF"
+                              className="text-blue-600 hover:text-blue-800 p-0.5 bg-blue-50 rounded-md shrink-0"
+                              title="Pratinjau PDF Satker"
                             >
                               <ExternalLink className="h-3.5 w-3.5" />
                             </a>
                           )}
                         </div>
+
+                        {/* Nota Dinas Badge */}
+                        {item.notaDinasNumber ? (
+                          <div className="flex items-center gap-1 text-[10px] font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 w-fit">
+                            <FileSpreadsheet className="h-3 w-3 text-amber-700" />
+                            <span className="truncate max-w-[140px]" title={item.notaDinasNumber}>ND: {item.notaDinasNumber}</span>
+                            {item.notaDinasFileUrl && (
+                              <a href={item.notaDinasFileUrl} target="_blank" rel="noopener noreferrer" className="text-amber-800 hover:underline">
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic block">Nota Dinas belum diterbitkan</span>
+                        )}
                       </td>
 
                       {/* Status & Progress Stepper */}
                       <td className="py-3.5 px-3.5 space-y-1.5">
-                        <div>{getStatusBadge(item.status)}</div>
+                        <div>{getStatusBadge(item.status, item)}</div>
                         {renderStatusProgress(item.status)}
                         {item.auditorRecommendation && (
-                          <div className="text-[11px] text-slate-600 italic line-clamp-1 max-w-[220px]" title={item.auditorRecommendation}>
+                          <div className="text-[10px] text-slate-600 italic line-clamp-1 max-w-[220px]" title={item.auditorRecommendation}>
                             "{item.auditorRecommendation}"
                           </div>
                         )}
@@ -312,56 +350,98 @@ export const TableView: React.FC<TableViewProps> = ({
 
                       {/* Actions Column based on Role */}
                       <td className="py-3.5 px-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {currentRole === 'satker' ? (
-                            item.status === 'perlu_perbaikan' && onOpenReviseModal ? (
-                              <button
-                                type="button"
-                                onClick={() => onOpenReviseModal(item)}
-                                className="px-3.5 py-1.5 bg-rose-500 hover:bg-rose-400 text-white font-extrabold rounded-xl text-xs shadow-2xs transition-all inline-flex items-center gap-1.5 transform active:scale-95 animate-pulse"
-                              >
-                                <FileEdit className="h-3.5 w-3.5" />
-                                <span>Perbaiki Dokumen</span>
-                              </button>
-                            ) : (
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          
+                          {/* Satker Actions */}
+                          {currentRole === 'satker' && (
+                            <>
+                              {item.status === 'selesai_keuangan' && onOpenSppModal && (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenSppModal(item)}
+                                  className={`px-3 py-1.5 font-black rounded-xl text-xs shadow-xs transition-all inline-flex items-center gap-1 transform active:scale-95 ${
+                                    item.sppNumber
+                                      ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-950 border border-emerald-300'
+                                      : 'bg-emerald-600 hover:bg-emerald-500 text-white animate-bounce'
+                                  }`}
+                                >
+                                  <FileCheck className="h-3.5 w-3.5" />
+                                  <span>{item.sppNumber ? 'Edit SPP' : 'Isi Data SPP'}</span>
+                                </button>
+                              )}
+
+                              {item.status === 'perlu_perbaikan' && onOpenReviseModal && (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenReviseModal(item)}
+                                  className="px-3.5 py-1.5 bg-rose-500 hover:bg-rose-400 text-white font-extrabold rounded-xl text-xs shadow-2xs transition-all inline-flex items-center gap-1.5 transform active:scale-95 animate-pulse"
+                                >
+                                  <FileEdit className="h-3.5 w-3.5" />
+                                  <span>Perbaiki Dokumen</span>
+                                </button>
+                              )}
+
                               <button
                                 type="button"
                                 onClick={() => onOpenFinanceModal(item)}
-                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors inline-flex items-center gap-1"
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors inline-flex items-center gap-1"
                               >
                                 <Eye className="h-3.5 w-3.5" />
                                 <span>Detail</span>
                               </button>
-                            )
-                          ) : currentRole === 'auditor' ? (
+                            </>
+                          )}
+
+                          {/* Verifikator Keuangan Actions */}
+                          {currentRole === 'verifikator' && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenFinanceModal(item)}
+                              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold rounded-xl text-xs shadow-2xs transition-all inline-flex items-center gap-1.5 transform active:scale-95"
+                            >
+                              <Wallet className="h-3.5 w-3.5" />
+                              <span>{item.notaDinasNumber ? 'Edit Nota Dinas' : 'Verif & Terbitkan Nota Dinas'}</span>
+                            </button>
+                          )}
+
+                          {/* Auditor Actions */}
+                          {currentRole === 'auditor' && (
                             <button
                               type="button"
                               onClick={() => onOpenAuditorModal(item)}
-                              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold rounded-xl text-xs shadow-2xs transition-all inline-flex items-center gap-1.5 transform active:scale-95"
+                              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-xl text-xs shadow-2xs transition-all inline-flex items-center gap-1.5 transform active:scale-95"
                             >
                               <ShieldCheck className="h-3.5 w-3.5" />
-                              <span>{item.status === 'direkomendasikan' ? 'Edit Verifikasi' : 'Verifikasi'}</span>
+                              <span>{item.status === 'direkomendasikan' ? 'Edit Verifikasi' : 'Verifikasi Auditor'}</span>
                             </button>
-                          ) : (
+                          )}
+
+                          {/* Admin Keuangan Actions */}
+                          {currentRole === 'keuangan' && (
                             <button
                               type="button"
                               onClick={() => onOpenFinanceModal(item)}
                               className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all inline-flex items-center gap-1.5 transform active:scale-95 ${
-                                item.status === 'direkomendasikan' || item.status === 'selesai_keuangan'
-                                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-xs'
-                                  : 'bg-yellow-500 hover:bg-yellow-400 text-slate-950 shadow-xs'
+                                item.status === 'direkomendasikan'
+                                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-xs animate-pulse'
+                                  : 'bg-emerald-700 hover:bg-emerald-600 text-white shadow-xs'
                               }`}
                             >
                               <Wallet className="h-3.5 w-3.5" />
-                              <span>{item.status === 'selesai_keuangan' ? 'Disetujui' : 'Menyetujui'}</span>
+                              <span>
+                                {item.status === 'direkomendasikan'
+                                  ? 'Setujui Keuangan'
+                                  : 'Detail Keuangan'}
+                              </span>
                             </button>
                           )}
 
+                          {/* Edit Entry Submission (Satker) */}
                           {currentRole === 'satker' && onOpenEditModal && (
                             <button
                               type="button"
                               onClick={() => onOpenEditModal(item)}
-                              className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl text-xs transition-colors inline-flex items-center gap-1 shadow-2xs"
+                              className="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl text-xs transition-colors inline-flex items-center gap-1 shadow-2xs"
                               title="Edit Data Permohonan"
                             >
                               <Pencil className="h-3.5 w-3.5 text-amber-700" />
@@ -369,6 +449,7 @@ export const TableView: React.FC<TableViewProps> = ({
                             </button>
                           )}
 
+                          {/* Delete Action */}
                           {(onOpenDeleteModal || onDeleteSubmission) && (
                             <button
                               type="button"
@@ -385,6 +466,7 @@ export const TableView: React.FC<TableViewProps> = ({
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           )}
+
                         </div>
                       </td>
                     </tr>
@@ -398,4 +480,3 @@ export const TableView: React.FC<TableViewProps> = ({
     </div>
   );
 };
-

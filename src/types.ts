@@ -1,4 +1,4 @@
-export type UserRole = 'satker' | 'auditor' | 'keuangan';
+export type UserRole = 'satker' | 'verifikator' | 'auditor' | 'keuangan';
 
 export type VerificationStatus = 
   | 'belum_diperiksa'
@@ -50,13 +50,32 @@ export interface SubmissionItem {
   whatsappNumber?: string;
   status: VerificationStatus;
   checklist: AuditChecklist;
+  
+  // Nota Dinas fields (Attached by Finance Verifier before Auditor review)
+  notaDinasNumber?: string;
+  notaDinasFileUrl?: string;
+  notaDinasFileName?: string;
+  notaDinasCreatedAt?: string;
+  notaDinasNotes?: string;
+
+  // Auditor Verification fields
   auditorRecommendation?: string;
   auditorNotes?: string;
   auditorName?: string;
   verifiedAt?: string;
+
+  // Final Finance Approval fields
   financeStatus?: string;
   financeNotes?: string;
   financeProcessedAt?: string;
+
+  // SPP fields (Filled by Satker user after final Finance approval)
+  sppNumber?: string;
+  sppFileUrl?: string;
+  sppFileName?: string;
+  sppSubmittedAt?: string;
+  sppNotes?: string;
+
   createdBySatkerUser?: string;
   notesFromSatker?: string;
   history: HistoryLog[];

@@ -164,11 +164,15 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
               </div>
             </div>
 
+            <div className="pt-2 border-t border-amber-200/80">
+              <span className="text-[11px] font-bold text-slate-500 block">Uraian Pengajuan:</span>
+              <span className="font-extrabold text-slate-900 text-xs">{item.jenisPengajuan || 'Permohonan Anggaran BA BUN'}</span>
+            </div>
+
             <div className="grid grid-cols-2 gap-3 pt-2 border-t border-amber-200/80">
               <div>
-                <span className="text-[11px] font-bold text-slate-500 block">ID Pengajuan & Waktu:</span>
-                <span className="font-mono font-bold text-amber-900 text-[11px]">{item.submissionId}</span>
-                <span className="block text-[10px] text-slate-500 font-medium">{item.submissionTime}</span>
+                <span className="text-[11px] font-bold text-slate-500 block">Waktu Entry:</span>
+                <span className="block text-[11px] text-slate-700 font-semibold">{item.submissionTime}</span>
               </div>
               <div>
                 <span className="text-[11px] font-bold text-slate-500 block">Nominal Permohonan:</span>
@@ -190,10 +194,40 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
                   className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-md text-xs flex items-center gap-1 shadow-2xs transition-colors shrink-0"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  <span>Buka PDF Dokumen</span>
+                  <span>Buka PDF Dokumen Satker</span>
                 </a>
               )}
             </div>
+
+            {/* Nota Dinas Verifikator Keuangan Box */}
+            {item.notaDinasNumber ? (
+              <div className="pt-2 border-t border-amber-200 bg-amber-100/90 p-2.5 rounded-lg border border-amber-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-black text-amber-950 uppercase tracking-wider block">Nota Dinas Verifikator Keuangan:</span>
+                    <span className="text-xs font-black text-slate-900">{item.notaDinasNumber}</span>
+                  </div>
+                  {item.notaDinasFileUrl && (
+                    <a
+                      href={item.notaDinasFileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 bg-amber-800 hover:bg-amber-900 text-white font-bold rounded-lg text-xs flex items-center gap-1 shrink-0 shadow-2xs"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      <span>Buka PDF Nota Dinas</span>
+                    </a>
+                  )}
+                </div>
+                {item.notaDinasNotes && (
+                  <p className="text-[11px] text-slate-700 italic mt-1 font-medium">"{item.notaDinasNotes}"</p>
+                )}
+              </div>
+            ) : (
+              <div className="pt-2 border-t border-amber-200 bg-amber-50 p-2 rounded-lg border border-amber-200 text-amber-900 font-medium text-[11px]">
+                ℹ️ Belum ada Nota Dinas khusus yang dilampirkan verifikator keuangan.
+              </div>
+            )}
 
             {/* WhatsApp Contact Officer Info */}
             <div className="pt-2 border-t border-amber-200 flex flex-wrap items-center justify-between gap-2 bg-emerald-50/90 p-2.5 rounded-lg border border-emerald-300 text-slate-800">

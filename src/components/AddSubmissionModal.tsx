@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { SubmissionItem, UserRole } from '../types';
+import { SubmissionItem, UserRole, SatkerAccount } from '../types';
 import { X, FilePlus2, Building2, Send, FileText, CheckCircle2 } from 'lucide-react';
 import { getWIBTimestamp } from '../lib/dateUtils';
+import { AttachmentUploader } from './AttachmentUploader';
 
 interface AddSubmissionModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface AddSubmissionModalProps {
   onAddSubmission: (newSub: Omit<SubmissionItem, 'id' | 'history'>) => void;
   defaultSatkerName?: string;
   currentRole?: UserRole;
+  satkerAccounts?: SatkerAccount[];
 }
 
 export const AddSubmissionModal: React.FC<AddSubmissionModalProps> = ({
@@ -17,8 +19,9 @@ export const AddSubmissionModal: React.FC<AddSubmissionModalProps> = ({
   onAddSubmission,
   defaultSatkerName = '',
   currentRole = 'satker',
+  satkerAccounts = [],
 }) => {
-  const [satker, setSatker] = useState('Kejari Bandar Lampung');
+  const [satker, setSatker] = useState(defaultSatkerName || 'Kejati Lampung');
   const [bidang, setBidang] = useState('Pembinaan');
   const [jenisPengajuan, setJenisPengajuan] = useState('');
   const [nominal, setNominal] = useState('');
@@ -126,19 +129,17 @@ export const AddSubmissionModal: React.FC<AddSubmissionModalProps> = ({
                   onChange={(e) => setSatker(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 >
-                  <option value="Kejari Bandar Lampung">Kejari Bandar Lampung</option>
-                  <option value="Kejari Metro">Kejari Metro</option>
-                  <option value="Kejari Lampung Selatan">Kejari Lampung Selatan</option>
-                  <option value="Kejari Tanggamus">Kejari Tanggamus</option>
-                  <option value="Kejari Lampung Tengah">Kejari Lampung Tengah</option>
-                  <option value="Kejari Lampung Utara">Kejari Lampung Utara</option>
-                  <option value="Kejari Pringsewu">Kejari Pringsewu</option>
-                  <option value="Kejari Pesawaran">Kejari Pesawaran</option>
-                  <option value="Kejari Tulang Bawang">Kejari Tulang Bawang</option>
-                  <option value="Kejari Way Kanan">Kejari Way Kanan</option>
-                  <option value="Kejari Lampung Timur">Kejari Lampung Timur</option>
-                  <option value="Kejari Pesisir Barat">Kejari Pesisir Barat</option>
-                  <option value="Kejati Lampung">Kejati Lampung</option>
+                  {satkerAccounts.length > 0 ? (
+                    satkerAccounts.map((acc) => (
+                      <option key={acc.id} value={acc.satkerName}>
+                        {acc.satkerName}
+                      </option>
+                    ))
+                  ) : (
+                    <option value={defaultSatkerName || 'Kejati Lampung'}>
+                      {defaultSatkerName || 'Kejati Lampung'}
+                    </option>
+                  )}
                 </select>
               )}
             </div>
@@ -164,14 +165,14 @@ export const AddSubmissionModal: React.FC<AddSubmissionModalProps> = ({
 
           <div>
             <label className="block text-xs font-bold text-slate-800 mb-1">
-              Jenis Pengajuan Anggaran BA BUN:
+              Uraian Pengajuan:
             </label>
             <input
               type="text"
               required
               value={jenisPengajuan}
               onChange={(e) => setJenisPengajuan(e.target.value)}
-              placeholder="Contoh: Permohonan UP / TUP Melampaui Besaran"
+              placeholder="Contoh: Pengadaan Peralatan TI / Permohonan TUP BA BUN"
               className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
           </div>
@@ -195,19 +196,17 @@ export const AddSubmissionModal: React.FC<AddSubmissionModalProps> = ({
             )}
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1">
-              URL Link Dokumen PDF / Google Drive / S3:
-            </label>
-            <input
-              type="url"
-              required
-              value={fileUrl}
-              onChange={(e) => setFileUrl(e.target.value)}
-              placeholder="Contoh: https://drive.google.com/file/d/... atau link dokumen PDF"
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-semibold focus:outline-none focus:ring-1 focus:ring-amber-500"
-            />
-          </div>
+          <AttachmentUploader
+            fileUrl={fileUrl}
+            fileName={fileName}
+            onFileChange={(url, name) => {
+              setFileUrl(url);
+              if (name) setFileName(name);
+            }}
+            label="Berkas Dokumen Permohonan BA BUN"
+            required={true}
+            accentColor="amber"
+          />
 
           <div>
             <label className="block text-xs font-bold text-slate-800 mb-1">

@@ -10,6 +10,7 @@ import {
   FileText,
   DollarSign
 } from 'lucide-react';
+import { AttachmentUploader } from './AttachmentUploader';
 
 interface ReviseSubmissionModalProps {
   item: SubmissionItem | null;
@@ -121,52 +122,35 @@ export const ReviseSubmissionModal: React.FC<ReviseSubmissionModalProps> = ({
               <span className="text-slate-500 font-mono text-[11px]">{item.submissionId}</span>
             </div>
             <div className="text-slate-600 font-medium">
-              Bidang: <strong>{item.bidang}</strong> | Jenis: <strong>{item.jenisPengajuan || 'UP / GUP'}</strong>
+              Bidang: <strong>{item.bidang}</strong> | Uraian: <strong>{item.jenisPengajuan || 'UP / GUP'}</strong>
             </div>
           </div>
 
           {/* Form Fields for Revision */}
           <div className="space-y-3 pt-1">
+            <AttachmentUploader
+              fileUrl={fileUrl}
+              fileName={fileName}
+              onFileChange={(url, name) => {
+                setFileUrl(url);
+                if (name) setFileName(name);
+              }}
+              label="Dokumen Permohonan Baru / Hasil Perbaikan"
+              required={true}
+              accentColor="amber"
+            />
+
             <div>
               <label className="block font-bold text-slate-800 mb-1">
-                Link Dokumen Permohonan Baru / Hasil Perbaikan (PDF / Google Drive) *
+                Nominal Anggaran (Rp)
               </label>
               <input
-                type="url"
-                required
-                value={fileUrl}
-                onChange={(e) => setFileUrl(e.target.value)}
-                placeholder="https://drive.google.com/file/d/... atau URL PDF baru"
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                type="number"
+                value={nominal || ''}
+                onChange={(e) => setNominal(Number(e.target.value))}
+                placeholder="Contoh: 150000000"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-emerald-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-bold text-slate-800 mb-1">
-                  Nama Berkas Dokumen Permohonan
-                </label>
-                <input
-                  type="text"
-                  value={fileName}
-                  onChange={(e) => setFileName(e.target.value)}
-                  placeholder="Contoh: B-5200-Permohonan-Revisi-BA-BUN.pdf"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-800 mb-1">
-                  Nominal Anggaran (Rp)
-                </label>
-                <input
-                  type="number"
-                  value={nominal || ''}
-                  onChange={(e) => setNominal(Number(e.target.value))}
-                  placeholder="Contoh: 150000000"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-emerald-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                />
-              </div>
             </div>
 
             <div>

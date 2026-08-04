@@ -25,10 +25,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     const trimmed = rawUsername.trim().toLowerCase();
     if (!trimmed) return;
 
-    if (trimmed === 'auditor.kejati' || trimmed === 'auditor') {
+    if (trimmed === 'verifikator' || trimmed === 'verifikator.keuangan') {
       setErrorMsg('');
-      onLogin('auditor', 'auditor.kejati');
-    } else if (trimmed === 'keuangan.babun' || trimmed === 'keuangan' || trimmed === 'admin') {
+      onLogin('verifikator', 'verifikator.keuangan');
+    } else if (trimmed === 'auditkejati' || trimmed === 'auditor.kejati' || trimmed === 'admin.kejati') {
+      setErrorMsg('');
+      onLogin('auditor', 'auditkejati');
+    } else if (trimmed === 'keuangan.babun' || trimmed === 'admin.keuangan') {
       setErrorMsg('');
       onLogin('keuangan', 'keuangan.babun');
     } else {
@@ -139,16 +142,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   className="w-full bg-slate-50/80 border border-slate-300 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 font-semibold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all shadow-xs"
                 />
               </div>
-              {errorMsg ? (
+              {errorMsg && (
                 <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold mt-2">
                   <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
                   <span>{errorMsg}</span>
                 </div>
-              ) : (
-                <p className="text-[10px] text-slate-500 font-medium">
-                  *User Kejaksaan Negeri menggunakan akun yang dibuat oleh Admin Keuangan.
-                </p>
               )}
+              <p className="text-[10px] text-slate-500 font-medium pt-1">
+                *Satker Kejari menggunakan username akun yang dibuat oleh Admin Keuangan. Akun internal Kejati login menggunakan NIP/Username resmi.
+              </p>
             </div>
 
             {/* Submit Button */}

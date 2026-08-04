@@ -17,6 +17,7 @@ import { TableView } from './components/TableView';
 import { ColumnBoard } from './components/ColumnBoard';
 import { AuditorVerifyModal } from './components/AuditorVerifyModal';
 import { FinanceProcessModal } from './components/FinanceProcessModal';
+import { SatkerSppModal } from './components/SatkerSppModal';
 import { AddSubmissionModal } from './components/AddSubmissionModal';
 import { SatkerManagementModal } from './components/SatkerManagementModal';
 import { ReviseSubmissionModal } from './components/ReviseSubmissionModal';
@@ -105,6 +106,7 @@ export default function App() {
   // Modals state
   const [auditorModalItem, setAuditorModalItem] = useState<SubmissionItem | null>(null);
   const [financeModalItem, setFinanceModalItem] = useState<SubmissionItem | null>(null);
+  const [sppModalItem, setSppModalItem] = useState<SubmissionItem | null>(null);
   const [reviseModalItem, setReviseModalItem] = useState<SubmissionItem | null>(null);
   const [editModalItem, setEditModalItem] = useState<SubmissionItem | null>(null);
   const [deleteModalItem, setDeleteModalItem] = useState<SubmissionItem | null>(null);
@@ -172,7 +174,7 @@ export default function App() {
     }
   };
 
-  // Save Auditor Verification & Checklist (Finance Admin ONLY approves/processes, doesn't alter auditor recommendation)
+  // Save Auditor Verification & Checklist
   const handleSaveAuditorVerification = async (
     itemId: string,
     status: VerificationStatus,
@@ -210,14 +212,57 @@ export default function App() {
 
     try {
       await saveSubmissionToFirestore(updatedItem);
-      showToast(`Rekomendasi Auditor tersimpan! Terbaca otomatis di portal Satker.`);
+      showToast(`Rekomendasi Auditor tersimpan! Terbaca otomatis di portal Admin Keuangan.`);
     } catch (e) {
       console.error("Firestore save error:", e);
       showToast(`Tersimpan secara lokal.`);
     }
   };
 
-  // Save Finance Processing (Finance Admin ONLY approves/processes, doesn't alter auditor recommendation)
+  // Save Nota Dinas Verifikator Keuangan
+  const handleSaveNotaDinas = async (
+    itemId: string,
+    notaDinasNumber: string,
+    notaDinasFileUrl: string,
+    notaDinasFileName: string,
+    notaDinasNotes: string
+  ) => {
+    const now = getWIBTimestamp();
+    const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
+    if (!targetItem) return;
+
+    const newLog = {
+      id: `log-nd-${Date.now()}`,
+      timestamp: now,
+      userRole: 'verifikator' as UserRole,
+      userName: 'Verifikator Keuangan',
+      action: `Nota Dinas Keuangan Diterbitkan: ${notaDinasNumber}`,
+      note: notaDinasNotes || 'Nota Dinas dilampirkan & diteruskan ke Auditor.'
+    };
+
+    const updatedItem: SubmissionItem = {
+      ...targetItem,
+      notaDinasNumber,
+      notaDinasFileUrl,
+      notaDinasFileName,
+      notaDinasNotes,
+      notaDinasCreatedAt: now,
+      status: 'sedang_diperiksa', // Forward to Auditor review stage
+      history: [newLog, ...(targetItem.history || [])]
+    };
+
+    setSubmissions(prev => prev.map(item => (item.id === itemId || item.submissionId === itemId) ? updatedItem : item));
+
+    try {
+      await saveSubmissionToFirestore(updatedItem);
+      showToast(`Nota Dinas (${notaDinasNumber}) berhasil diterbitkan & diteruskan ke Auditor!`);
+    } catch (e) {
+      console.error("Firestore save error:", e);
+      showToast(`Nota Dinas tersimpan secara lokal.`);
+    }
+  };
+
+  // Save Final Finance Approval (Admin Keuangan)
   const handleSaveFinanceProcess = async (
     itemId: string,
     status: VerificationStatus,
@@ -250,10 +295,52 @@ export default function App() {
 
     try {
       await saveSubmissionToFirestore(updatedItem);
-      showToast(`Persetujuan Keuangan tersimpan! SP2D/Proses disetujui.`);
+      showToast(`Persetujuan Keuangan tersimpan! Satker kini dapat mengisikan nomor SPP.`);
     } catch (e) {
       console.error("Firestore save error:", e);
       showToast(`Tersimpan secara lokal.`);
+    }
+  };
+
+  // Handle Satker SPP Input
+  const handleSaveSppData = async (
+    itemId: string,
+    sppNumber: string,
+    sppFileUrl: string,
+    sppFileName: string,
+    sppNotes: string
+  ) => {
+    const now = getWIBTimestamp();
+    const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
+    if (!targetItem) return;
+
+    const newLog = {
+      id: `log-spp-${Date.now()}`,
+      timestamp: now,
+      userRole: 'satker' as UserRole,
+      userName: satkerName || userName || 'User Satker',
+      action: `Input Data SPP Satker: ${sppNumber}`,
+      note: sppNotes || 'Dokumen & Nomor SPP telah dilampirkan oleh Satker.'
+    };
+
+    const updatedItem: SubmissionItem = {
+      ...targetItem,
+      sppNumber,
+      sppFileUrl,
+      sppFileName,
+      sppNotes,
+      sppSubmittedAt: now,
+      history: [newLog, ...(targetItem.history || [])]
+    };
+
+    setSubmissions(prev => prev.map(item => (item.id === itemId || item.submissionId === itemId) ? updatedItem : item));
+
+    try {
+      await saveSubmissionToFirestore(updatedItem);
+      showToast(`Data SPP (${sppNumber}) berhasil disimpan & terkirim!`);
+    } catch (e) {
+      console.error("Firestore save error:", e);
+      showToast(`Data SPP tersimpan secara lokal.`);
     }
   };
 
@@ -464,6 +551,7 @@ export default function App() {
             currentRole={currentRole}
             onOpenAuditorModal={(item) => setAuditorModalItem(item)}
             onOpenFinanceModal={(item) => setFinanceModalItem(item)}
+            onOpenSppModal={(item) => setSppModalItem(item)}
             onOpenReviseModal={(item) => setReviseModalItem(item)}
             onOpenEditModal={(item) => setEditModalItem(item)}
             onOpenDeleteModal={(item) => setDeleteModalItem(item)}
@@ -477,6 +565,7 @@ export default function App() {
             onFilterChange={setFilters}
             onOpenAuditorModal={(item) => setAuditorModalItem(item)}
             onOpenFinanceModal={(item) => setFinanceModalItem(item)}
+            onOpenSppModal={(item) => setSppModalItem(item)}
             onOpenReviseModal={(item) => setReviseModalItem(item)}
             onOpenEditModal={(item) => setEditModalItem(item)}
             onOpenDeleteModal={(item) => setDeleteModalItem(item)}
@@ -503,6 +592,7 @@ export default function App() {
       <AuditorVerifyModal
         item={auditorModalItem}
         isOpen={!!auditorModalItem}
+        satkerAccounts={satkerAccounts}
         onClose={() => setAuditorModalItem(null)}
         onSaveVerification={handleSaveAuditorVerification}
       />
@@ -512,8 +602,18 @@ export default function App() {
         item={financeModalItem}
         isOpen={!!financeModalItem}
         currentRole={currentRole}
+        satkerAccounts={satkerAccounts}
         onClose={() => setFinanceModalItem(null)}
+        onSaveNotaDinas={handleSaveNotaDinas}
         onSaveFinanceProcess={handleSaveFinanceProcess}
+      />
+
+      {/* Satker SPP Input Form Modal */}
+      <SatkerSppModal
+        item={sppModalItem}
+        isOpen={!!sppModalItem}
+        onClose={() => setSppModalItem(null)}
+        onSaveSpp={handleSaveSppData}
       />
 
       {/* Satker Resubmit Revision Modal */}
@@ -547,6 +647,7 @@ export default function App() {
         onAddSubmission={handleAddSubmission}
         defaultSatkerName={satkerName}
         currentRole={currentRole}
+        satkerAccounts={satkerAccounts}
       />
 
       {/* Admin Keuangan Satker Account Management Modal */}
@@ -562,4 +663,3 @@ export default function App() {
     </div>
   );
 }
-

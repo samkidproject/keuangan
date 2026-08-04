@@ -18,12 +18,16 @@ interface StatsCardsProps {
 }
 
 export const StatsCards: React.FC<StatsCardsProps> = ({ items, currentRole }) => {
-  const total = items.length;
-  const belumDiperiksa = items.filter(i => i.status === 'belum_diperiksa').length;
-  const sedangDiperiksa = items.filter(i => i.status === 'sedang_diperiksa').length;
-  const direkomendasikan = items.filter(i => i.status === 'direkomendasikan').length;
-  const perluPerbaikan = items.filter(i => i.status === 'perlu_perbaikan' || i.status === 'ditolak').length;
-  const selesaiKeuangan = items.filter(i => i.status === 'selesai_keuangan').length;
+  const roleItems = (currentRole === 'auditor' || currentRole === 'keuangan')
+    ? items.filter(i => Boolean(i.notaDinasNumber && i.notaDinasNumber.trim()))
+    : items;
+
+  const total = roleItems.length;
+  const belumDiperiksa = roleItems.filter(i => i.status === 'belum_diperiksa').length;
+  const sedangDiperiksa = roleItems.filter(i => i.status === 'sedang_diperiksa').length;
+  const direkomendasikan = roleItems.filter(i => i.status === 'direkomendasikan').length;
+  const perluPerbaikan = roleItems.filter(i => i.status === 'perlu_perbaikan' || i.status === 'ditolak').length;
+  const selesaiKeuangan = roleItems.filter(i => i.status === 'selesai_keuangan').length;
 
   // Percentage verified by Auditor
   const totalAudited = direkomendasikan + selesaiKeuangan;
@@ -47,24 +51,42 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ items, currentRole }) =>
     <div className="space-y-4">
       {/* Bento Grid Role Notice Banner */}
       <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs backdrop-blur-md shadow-xs transition-all ${
-        currentRole === 'auditor'
-          ? 'bg-amber-100/80 border-amber-300 text-amber-950'
-          : 'bg-yellow-100/80 border-yellow-300 text-yellow-950'
+        currentRole === 'verifikator'
+          ? 'bg-amber-100/90 border-amber-300 text-amber-950'
+          : currentRole === 'auditor'
+          ? 'bg-blue-100/80 border-blue-300 text-blue-950'
+          : currentRole === 'keuangan'
+          ? 'bg-emerald-100/80 border-emerald-300 text-emerald-950'
+          : 'bg-slate-100 border-slate-300 text-slate-800'
       }`}>
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-xl ${
-            currentRole === 'auditor' ? 'bg-amber-500 text-slate-950 border border-amber-400' : 'bg-yellow-500 text-slate-950 border border-yellow-400'
+            currentRole === 'verifikator'
+              ? 'bg-amber-500 text-slate-950 border border-amber-400'
+              : currentRole === 'auditor'
+              ? 'bg-blue-500 text-white border border-blue-400'
+              : 'bg-emerald-600 text-white border border-emerald-500'
           }`}>
             {currentRole === 'auditor' ? <ShieldCheck className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
           </div>
           <div>
             <span className="font-extrabold uppercase tracking-wider text-[11px] block text-slate-900">
-              {currentRole === 'auditor' ? 'Mode Admin Auditor (Tim Pemeriksa)' : 'Mode Admin Keuangan (Pengelola BA BUN)'}
+              {currentRole === 'verifikator'
+                ? 'Mode Verifikator Keuangan (Penerbitan Nota Dinas Tahap 1)'
+                : currentRole === 'auditor'
+                ? 'Mode Admin Auditor (Pemeriksaan Checklist Tahap 2)'
+                : currentRole === 'keuangan'
+                ? 'Mode Admin Keuangan (Persetujuan Akhir BA BUN & Akun Satker)'
+                : 'Portal Satker Kejaksaan Negeri'}
             </span>
             <p className="text-slate-700 mt-0.5 font-medium">
-              {currentRole === 'auditor'
-                ? 'Lakukan pemeriksaan kelengkapan berkas, lalu centang checklist rekomendasi untuk memperbarui progress di Admin Keuangan.'
-                : 'Melihat progress verifikasi dari Admin Auditor secara real-time. Data yang sudah direkomendasikan siap diproses ke SP2D.'
+              {currentRole === 'verifikator'
+                ? 'Periksa permohonan masuk, terbitkan dan lampirkan Nota Dinas Keuangan agar berkas diteruskan ke Admin Auditor.'
+                : currentRole === 'auditor'
+                ? 'Lakukan verifikasi kelengkapan berkas, centang checklist & berikan rekomendasi agar berkas diteruskan ke Admin Keuangan.'
+                : currentRole === 'keuangan'
+                ? 'Menerima rekomendasi dari Auditor, berikan persetujuan akhir keuangan, dan kelola akun Satker Kejaksaan Negeri.'
+                : 'Pantau status permohonan BA BUN, lengkapi berkas revisi jika ada, dan input nomor SPP setelah disetujui Keuangan.'
               }
             </p>
           </div>

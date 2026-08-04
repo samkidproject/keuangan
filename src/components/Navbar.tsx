@@ -51,19 +51,25 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <h1 className="text-lg font-black tracking-tight text-slate-900 font-sans">
                   {currentRole === 'satker'
                     ? `Portal Satker ${satkerName || 'Kejaksaan Negeri'}`
+                    : currentRole === 'verifikator'
+                    ? 'Portal Verifikator Keuangan'
                     : currentRole === 'auditor'
-                    ? 'Portal e-Auditor Kejati Lampung'
-                    : 'Portal Subbagian Keuangan BA BUN'}
+                    ? 'Portal Auditor Kejati Lampung'
+                    : 'Portal Admin Keuangan BA BUN'}
                 </h1>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border shadow-2xs ${
                   currentRole === 'satker'
                     ? 'bg-amber-100 text-amber-900 border-amber-300'
+                    : currentRole === 'verifikator'
+                    ? 'bg-yellow-100 text-yellow-950 border-yellow-400'
                     : currentRole === 'auditor'
                     ? 'bg-blue-100 text-blue-900 border-blue-300'
                     : 'bg-emerald-100 text-emerald-900 border-emerald-300'
                 }`}>
                   {currentRole === 'satker'
                     ? 'User Satker Kejaksaan Negeri'
+                    : currentRole === 'verifikator'
+                    ? 'Verifikator Keuangan'
                     : currentRole === 'auditor'
                     ? 'Akses Admin Auditor'
                     : 'Akses Admin Keuangan'}
@@ -73,9 +79,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>
                   {currentRole === 'satker'
                     ? 'Entry Form Permohonan BA BUN & Pantau Status Pengajuan'
+                    : currentRole === 'verifikator'
+                    ? 'Verifikasi Berkas Awal & Penerbitan Nota Dinas Verifikator Keuangan'
                     : currentRole === 'auditor'
                     ? 'Pemeriksaan Verifikasi Checklist & Rekomendasi Auditor'
-                    : 'Persetujuan Keuangan, SP2D & Kelola Akun Satker'}
+                    : 'Persetujuan Akhir BA BUN & Pengelolaan Akun Satker'}
                 </span>
                 <span className="text-amber-300">•</span>
                 <span className="text-emerald-700 font-bold flex items-center gap-1.5">
