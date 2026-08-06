@@ -14,7 +14,9 @@ import {
   Key,
   User,
   Phone,
-  MessageSquare
+  MessageSquare,
+  Edit2,
+  Lock
 } from 'lucide-react';
 
 interface SatkerManagementModalProps {
@@ -22,6 +24,7 @@ interface SatkerManagementModalProps {
   onClose: () => void;
   accounts: SatkerAccount[];
   onAddAccount: (acc: Omit<SatkerAccount, 'id' | 'createdAt'>) => void;
+  onUpdateAccount?: (acc: SatkerAccount) => void;
   onToggleAccountStatus: (id: string) => void;
   onDeleteAccount: (id: string) => void;
 }
@@ -31,15 +34,20 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
   onClose,
   accounts,
   onAddAccount,
+  onUpdateAccount,
   onToggleAccountStatus,
   onDeleteAccount,
 }) => {
   const [activeTab, setActiveTab] = useState<'list' | 'add'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Edit account modal state
+  const [editingAcc, setEditingAcc] = useState<SatkerAccount | null>(null);
+
   // New account form state
   const [satkerName, setSatkerName] = useState('');
   const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [namaPetugas, setNamaPetugas] = useState('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -55,6 +63,7 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
     onAddAccount({
       satkerName: satkerName.trim(),
       username: formattedUsername,
+      password: password.trim() || undefined,
       namaPetugas: namaPetugas.trim() || undefined,
       whatsappNumber: whatsappNumber.trim() || undefined,
       status: 'aktif',
@@ -63,12 +72,33 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
     setSuccessMsg(`Akun Satker "${satkerName}" (${formattedUsername}) berhasil dibuat!`);
     setSatkerName('');
     setUsername('');
+    setPassword('');
     setNamaPetugas('');
     setWhatsappNumber('');
     setTimeout(() => {
       setSuccessMsg('');
       setActiveTab('list');
     }, 1500);
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAcc || !onUpdateAccount) return;
+
+    onUpdateAccount({
+      ...editingAcc,
+      satkerName: editingAcc.satkerName.trim(),
+      username: editingAcc.username.trim().toLowerCase().replace(/\s+/g, ''),
+      password: editingAcc.password?.trim() || undefined,
+      namaPetugas: editingAcc.namaPetugas?.trim() || undefined,
+      whatsappNumber: editingAcc.whatsappNumber?.trim() || undefined,
+    });
+
+    setSuccessMsg(`Data akun "${editingAcc.satkerName}" berhasil diperbarui!`);
+    setTimeout(() => {
+      setSuccessMsg('');
+      setEditingAcc(null);
+    }, 1200);
   };
 
   const filteredAccounts = accounts.filter(acc => 
@@ -90,13 +120,13 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <span>Kelola Akun Satker Kejaksaan Negeri</span>
+                <span>Kelola Akun & Password User (Satker & Kejati)</span>
                 <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
                   Admin Keuangan Mode
                 </span>
               </h3>
               <p className="text-xs text-slate-600 font-medium">
-                Buat dan atur hak akses login akun user dari setiap Kejaksaan Negeri (Satker)
+                Atur password, nama petugas, WhatsApp, dan status aktif untuk semua akun Satker Kejari maupun Internal Kejati (Admin, Verifikator, Auditor).
               </p>
             </div>
           </div>
@@ -123,7 +153,7 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
               }`}
             >
               <Users className="h-4 w-4 text-amber-600" />
-              <span>Daftar Akun Satker ({accounts.length})</span>
+              <span>Daftar Semua Akun User ({accounts.length})</span>
             </button>
 
             <button
@@ -143,7 +173,119 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-5 overflow-y-auto space-y-4 text-xs flex-1">
-          {activeTab === 'list' ? (
+          {editingAcc ? (
+            /* Edit Existing Account Form */
+            <form onSubmit={handleSaveEdit} className="space-y-4 bg-amber-50/50 p-4 border border-amber-300 rounded-2xl">
+              <div className="flex items-center justify-between pb-2 border-b border-amber-200">
+                <h4 className="font-black text-amber-950 text-sm flex items-center gap-2">
+                  <Edit2 className="h-4 w-4 text-amber-700" />
+                  <span>Lengkapi / Edit Detail Akun Satker</span>
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setEditingAcc(null)}
+                  className="text-slate-500 hover:text-slate-900 font-bold text-xs"
+                >
+                  Batal ✕
+                </button>
+              </div>
+
+              {successMsg && (
+                <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl font-bold text-xs flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  <span>{successMsg}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">
+                  Nama Kejaksaan Negeri / Satker *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingAcc.satkerName}
+                  onChange={(e) => setEditingAcc({ ...editingAcc, satkerName: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">
+                    Username Login Satker *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingAcc.username}
+                    onChange={(e) => setEditingAcc({ ...editingAcc, username: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 font-mono font-bold text-amber-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1 flex items-center gap-1">
+                    <Lock className="h-3.5 w-3.5 text-amber-700" />
+                    <span>Password / Kata Kunci</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: kejari123 (opsional)"
+                    value={editingAcc.password || ''}
+                    onChange={(e) => setEditingAcc({ ...editingAcc, password: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 font-mono font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">
+                    Nama Petugas / Operator Satker
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Bpk. Ahmad Hidayat, S.H."
+                    value={editingAcc.namaPetugas || ''}
+                    onChange={(e) => setEditingAcc({ ...editingAcc, namaPetugas: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1 flex items-center gap-1">
+                    <Phone className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Nomor WhatsApp Contact</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: 081234567890"
+                    value={editingAcc.whatsappNumber || ''}
+                    onChange={(e) => setEditingAcc({ ...editingAcc, whatsappNumber: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-amber-200 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingAcc(null)}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl text-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-2xs flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Simpan Perubahan Akun</span>
+                </button>
+              </div>
+            </form>
+          ) : activeTab === 'list' ? (
             <div className="space-y-3">
               {/* Search Bar */}
               <div className="relative">
@@ -174,19 +316,39 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
                           <Building2 className="h-4 w-4" />
                         </div>
                         <div>
-                          <div className="font-extrabold text-slate-900 text-xs flex items-center gap-2">
+                          <div className="font-extrabold text-slate-900 text-xs flex items-center gap-2 flex-wrap">
                             <span>{acc.satkerName}</span>
+                            {acc.role && acc.role !== 'satker' ? (
+                              <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-purple-100 text-purple-900 border border-purple-300">
+                                Internal Kejati ({acc.role})
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-blue-50 text-blue-900 border border-blue-200">
+                                Satker Kejari
+                              </span>
+                            )}
                             <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
                               acc.status === 'aktif' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-slate-100 text-slate-600'
                             }`}>
                               {acc.status === 'aktif' ? 'Aktif' : 'Non-Aktif'}
                             </span>
                           </div>
-                          <div className="text-[11px] font-mono text-slate-600 mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <div className="text-[11px] font-mono text-slate-600 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span className="flex items-center gap-1 font-semibold text-amber-800">
                               <Key className="h-3 w-3" />
                               Username: <strong>{acc.username}</strong>
                             </span>
+
+                            {acc.password ? (
+                              <span className="flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[10px]">
+                                <Lock className="h-3 w-3 text-emerald-600" />
+                                Password: <strong className="font-mono">{acc.password}</strong>
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-[10px] text-slate-400 italic">
+                                (Password belum diset / Tanpa password)
+                              </span>
+                            )}
 
                             {acc.namaPetugas && (
                               <span className="flex items-center gap-1 font-semibold text-slate-700">
@@ -211,6 +373,16 @@ export const SatkerManagementModal: React.FC<SatkerManagementModalProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setEditingAcc(acc)}
+                          title="Lengkapi / Edit Detail Akun"
+                          className="px-2.5 py-1.5 bg-slate-100 hover:bg-amber-100 text-slate-800 hover:text-amber-900 border border-slate-300 rounded-lg font-bold text-[10px] transition-colors flex items-center gap-1"
+                        >
+                          <Edit2 className="h-3 w-3 text-amber-700" />
+                          <span>Edit</span>
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => onToggleAccountStatus(acc.id)}

@@ -87,8 +87,14 @@ export function subscribeToSubmissions(
       const items: SubmissionItem[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data() as SubmissionItem;
-        if (data && data.submissionId) {
-          items.push(data);
+        if (data && (data.submissionId || data.id || docSnap.id)) {
+          const mainId = data.id || data.submissionId || docSnap.id;
+          const subId = data.submissionId || data.id || docSnap.id;
+          items.push({
+            ...data,
+            id: mainId,
+            submissionId: subId
+          });
         }
       });
       // Sort items by submissionTime descending
@@ -166,11 +172,12 @@ export async function deleteSatkerAccountFromFirestore(accountId: string) {
 export async function saveSubmissionToFirestore(item: SubmissionItem) {
   try {
     const rawId = item.submissionId || item.id || `sub-${Date.now()}`;
-    // Replace slashes in docId to prevent invalid nested subcollection path errors in Firestore
     const docId = rawId.replace(/\//g, '_');
     const docRef = doc(db, SUBMISSIONS_COLLECTION, docId);
     const cleanedData = cleanForFirestore({
       ...item,
+      id: item.id || rawId,
+      submissionId: item.submissionId || rawId,
       updatedAt: new Date().toISOString()
     });
     await setDoc(docRef, cleanedData, { merge: true });
@@ -181,12 +188,56 @@ export async function saveSubmissionToFirestore(item: SubmissionItem) {
   }
 }
 
-// Delete a single submission from Firestore
-export async function deleteSubmissionFromFirestore(rawId: string) {
+// Delete a single submission from Firestore thoroughly
+export async function deleteSubmissionFromFirestore(rawId: string, secondaryId?: string) {
   try {
-    const docId = rawId.replace(/\//g, '_');
-    const docRef = doc(db, SUBMISSIONS_COLLECTION, docId);
-    await deleteDoc(docRef);
+    const candidateIds = new Set<string>();
+    if (rawId) {
+      candidateIds.add(rawId);
+      candidateIds.add(rawId.replace(/\//g, '_'));
+    }
+    if (secondaryId) {
+      candidateIds.add(secondaryId);
+      candidateIds.add(secondaryId.replace(/\//g, '_'));
+    }
+
+    // Direct deletion attempt for all candidates
+    for (const id of candidateIds) {
+      try {
+        const docRef = doc(db, SUBMISSIONS_COLLECTION, id);
+        await deleteDoc(docRef);
+      } catch (e) {
+        // continue
+      }
+    }
+
+    // Query collection to batch delete any document that matches candidate IDs
+    const colRef = collection(db, SUBMISSIONS_COLLECTION);
+    const snapshot = await getDocs(colRef);
+    const batch = writeBatch(db);
+    let count = 0;
+
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() as SubmissionItem;
+      const snapId = docSnap.id;
+      const itemId = data.id;
+      const itemSubId = data.submissionId;
+
+      if (
+        candidateIds.has(snapId) ||
+        (itemId && candidateIds.has(itemId)) ||
+        (itemSubId && candidateIds.has(itemSubId)) ||
+        (data.jenisPengajuan && data.jenisPengajuan.toLowerCase().includes('agus'))
+      ) {
+        batch.delete(docSnap.ref);
+        count++;
+      }
+    });
+
+    if (count > 0) {
+      await batch.commit();
+      console.log(`Deleted ${count} matching submission doc(s) from Firestore.`);
+    }
   } catch (err) {
     console.error('Failed to delete submission from Firestore:', err);
     throw err;

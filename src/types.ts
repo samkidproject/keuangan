@@ -29,8 +29,10 @@ export interface SatkerAccount {
   id: string;
   username: string;
   satkerName: string;
+  role?: UserRole;
   namaPetugas?: string;
   whatsappNumber?: string;
+  password?: string;
   bidangDefault?: string;
   status: 'aktif' | 'nonaktif';
   createdAt: string;

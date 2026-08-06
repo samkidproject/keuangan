@@ -28,8 +28,36 @@ import { EditSubmissionModal } from './components/EditSubmissionModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { getWIBTimestamp } from './lib/dateUtils';
 
+import { DEFAULT_SATKER_ACCOUNTS } from './data/defaultSatkers';
+
 const LOCAL_STORAGE_KEY = 'ba_bun_firebase_submissions_v2';
 const LOCAL_STORAGE_ACCOUNTS_KEY = 'ba_bun_satker_accounts_v1';
+
+function mergeWithDefaultSatkers(incoming: SatkerAccount[]): SatkerAccount[] {
+  const map = new Map<string, SatkerAccount>();
+  
+  // First load all default 17 satkers
+  DEFAULT_SATKER_ACCOUNTS.forEach(acc => {
+    map.set(acc.username.toLowerCase(), acc);
+  });
+
+  // Merge incoming accounts (overriding defaults if custom attributes like namaPetugas/password/whatsapp exist)
+  if (Array.isArray(incoming)) {
+    incoming.forEach(acc => {
+      if (acc && acc.username) {
+        const key = acc.username.toLowerCase();
+        const existing = map.get(key);
+        if (existing) {
+          map.set(key, { ...existing, ...acc });
+        } else {
+          map.set(key, acc);
+        }
+      }
+    });
+  }
+
+  return Array.from(map.values());
+}
 
 export default function App() {
   // Authentication & Login State
@@ -46,12 +74,12 @@ export default function App() {
       const savedAccs = localStorage.getItem(LOCAL_STORAGE_ACCOUNTS_KEY);
       if (savedAccs) {
         const parsed = JSON.parse(savedAccs);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) return mergeWithDefaultSatkers(parsed);
       }
     } catch (e) {
       console.error("Failed to load saved accounts:", e);
     }
-    return [];
+    return DEFAULT_SATKER_ACCOUNTS;
   });
 
   // Save Accounts to LocalStorage
@@ -175,19 +203,21 @@ export default function App() {
     const unsubscribeAccounts = subscribeToSatkerAccounts(
       (firestoreAccounts) => {
         if (firestoreAccounts && firestoreAccounts.length > 0) {
-          setSatkerAccounts(firestoreAccounts);
+          setSatkerAccounts(mergeWithDefaultSatkers(firestoreAccounts));
           setFirestoreError(null);
         } else {
-          // If Firestore is empty, sync existing local accounts to Firestore
+          // If Firestore is empty, sync default & local accounts to Firestore
           try {
             const savedAccs = localStorage.getItem(LOCAL_STORAGE_ACCOUNTS_KEY);
+            let merged = DEFAULT_SATKER_ACCOUNTS;
             if (savedAccs) {
               const parsed = JSON.parse(savedAccs);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                setSatkerAccounts(parsed);
-                saveAllSatkerAccountsToFirestore(parsed);
+              if (Array.isArray(parsed)) {
+                merged = mergeWithDefaultSatkers(parsed);
               }
             }
+            setSatkerAccounts(merged);
+            saveAllSatkerAccountsToFirestore(merged);
           } catch (e) {
             console.error("Local accounts sync error:", e);
           }
@@ -200,8 +230,8 @@ export default function App() {
           const savedAccs = localStorage.getItem(LOCAL_STORAGE_ACCOUNTS_KEY);
           if (savedAccs) {
             const parsed = JSON.parse(savedAccs);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setSatkerAccounts(parsed);
+            if (Array.isArray(parsed)) {
+              setSatkerAccounts(mergeWithDefaultSatkers(parsed));
             }
           }
         } catch (e) {
@@ -540,6 +570,12 @@ export default function App() {
     showToast(`Akun ${newAcc.satkerName} (${newAcc.username}) berhasil ditambahkan!`);
   };
 
+  const handleUpdateSatkerAccount = async (updatedAcc: SatkerAccount) => {
+    setSatkerAccounts(prev => prev.map(acc => acc.id === updatedAcc.id ? updatedAcc : acc));
+    await saveSatkerAccountToFirestore(updatedAcc);
+    showToast(`Data akun ${updatedAcc.satkerName} (${updatedAcc.username}) berhasil diperbarui!`);
+  };
+
   const handleToggleSatkerAccountStatus = async (id: string) => {
     const target = satkerAccounts.find(acc => acc.id === id);
     if (!target) return;
@@ -560,6 +596,22 @@ export default function App() {
       showToast(`Akun ${target.satkerName} berhasil dihapus.`);
     }
   };
+
+  // Submissions Data Isolation:
+  // User Satker logged in ONLY sees their own Satker's submissions.
+  // Internal Kejati roles (verifikator, keuangan, auditor) see all submissions.
+  const visibleSubmissions = React.useMemo(() => {
+    if (currentRole === 'satker' && satkerName) {
+      const sNameLower = satkerName.trim().toLowerCase();
+      const uNameLower = userName.trim().toLowerCase();
+      return submissions.filter(item => {
+        const itemSatkerLower = item.satker?.trim().toLowerCase() || '';
+        const itemUserLower = item.createdBySatkerUser?.trim().toLowerCase() || '';
+        return itemSatkerLower === sNameLower || itemUserLower === uNameLower;
+      });
+    }
+    return submissions;
+  }, [submissions, currentRole, satkerName, userName]);
 
   const handleFilterChange = (part: Partial<FilterState>) => {
     setFilters(prev => ({ ...prev, ...part }));
@@ -599,7 +651,7 @@ export default function App() {
         onFilterChange={handleFilterChange}
         onOpenAddModal={() => setIsAddModalOpen(true)}
         onOpenSatkerModal={() => setIsSatkerModalOpen(true)}
-        totalItems={submissions.length}
+        totalItems={visibleSubmissions.length}
       />
 
       {/* Main Content Dashboard */}
@@ -644,12 +696,12 @@ service cloud.firestore {
 
         {/* Metric KPI Overview */}
 
-        <StatsCards items={submissions} currentRole={currentRole} />
+        <StatsCards items={visibleSubmissions} currentRole={currentRole} />
 
         {/* View Display (Column Board or Table View) */}
         {filters.viewMode === 'column' ? (
           <ColumnBoard
-            items={submissions}
+            items={visibleSubmissions}
             currentRole={currentRole}
             onOpenAuditorModal={(item) => setAuditorModalItem(item)}
             onOpenFinanceModal={(item) => setFinanceModalItem(item)}
@@ -661,7 +713,7 @@ service cloud.firestore {
           />
         ) : (
           <TableView
-            items={submissions}
+            items={visibleSubmissions}
             currentRole={currentRole}
             filters={filters}
             onFilterChange={setFilters}
@@ -758,6 +810,7 @@ service cloud.firestore {
         onClose={() => setIsSatkerModalOpen(false)}
         accounts={satkerAccounts}
         onAddAccount={handleAddSatkerAccount}
+        onUpdateAccount={handleUpdateSatkerAccount}
         onToggleAccountStatus={handleToggleSatkerAccountStatus}
         onDeleteAccount={handleDeleteSatkerAccount}
       />

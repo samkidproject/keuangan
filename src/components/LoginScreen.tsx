@@ -6,7 +6,8 @@ import {
   ArrowRight, 
   Sparkles,
   AlertCircle,
-  ShieldCheck
+  ShieldCheck,
+  Lock
 } from 'lucide-react';
 
 interface LoginScreenProps {
@@ -19,35 +20,61 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   satkerAccounts = []
 }) => {
   const [username, setUsername] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
 
   const processLogin = (rawUsername: string) => {
     const trimmed = rawUsername.trim().toLowerCase();
     if (!trimmed) return;
 
+    // Check if username matches an existing account in satkerAccounts (both Satker and Internal Kejati roles)
+    const matchedAccount = satkerAccounts.find(acc => 
+      acc.username.toLowerCase() === trimmed || 
+      (trimmed === 'keuangan.babun' && acc.username.toLowerCase() === 'admin') ||
+      (trimmed === 'admin.keuangan' && acc.username.toLowerCase() === 'admin') ||
+      (trimmed === 'keuangan' && acc.username.toLowerCase() === 'admin') ||
+      (trimmed === 'verifikator.keuangan' && acc.username.toLowerCase() === 'verifikator') ||
+      (trimmed === 'auditkejati' && acc.username.toLowerCase() === 'auditor') ||
+      (trimmed === 'admin.kejati' && acc.username.toLowerCase() === 'auditor')
+    );
+
+    if (matchedAccount) {
+      if (matchedAccount.status === 'nonaktif') {
+        setErrorMsg(`Akun "${matchedAccount.satkerName}" saat ini non-aktif. Hubungi Admin Keuangan.`);
+        return;
+      }
+      
+      // If password is set on the account, check it
+      if (matchedAccount.password && matchedAccount.password.trim() !== '') {
+        if (password !== matchedAccount.password) {
+          setErrorMsg(`Password salah untuk akun "${matchedAccount.satkerName}".`);
+          return;
+        }
+      }
+
+      setErrorMsg('');
+      const matchedRole: UserRole = matchedAccount.role || (
+        (trimmed.includes('verifikator')) ? 'verifikator' :
+        (trimmed.includes('audit')) ? 'auditor' :
+        (trimmed === 'admin' || trimmed.includes('keuangan')) ? 'keuangan' : 'satker'
+      );
+
+      onLogin(matchedRole, matchedAccount.username, matchedAccount.satkerName);
+      return;
+    }
+
+    // Fallback if accounts list is not yet loaded
     if (trimmed === 'verifikator' || trimmed === 'verifikator.keuangan') {
       setErrorMsg('');
       onLogin('verifikator', 'verifikator.keuangan');
-    } else if (trimmed === 'auditkejati' || trimmed === 'auditor.kejati' || trimmed === 'admin.kejati') {
+    } else if (trimmed === 'auditkejati' || trimmed === 'auditor.kejati' || trimmed === 'admin.kejati' || trimmed === 'auditor') {
       setErrorMsg('');
       onLogin('auditor', 'auditkejati');
-    } else if (trimmed === 'keuangan.babun' || trimmed === 'admin.keuangan') {
+    } else if (trimmed === 'keuangan.babun' || trimmed === 'admin.keuangan' || trimmed === 'admin' || trimmed === 'keuangan') {
       setErrorMsg('');
       onLogin('keuangan', 'keuangan.babun');
     } else {
-      // Check if username matches an existing registered Satker account
-      const matchedAccount = satkerAccounts.find(acc => acc.username.toLowerCase() === trimmed);
-      
-      if (matchedAccount) {
-        if (matchedAccount.status === 'nonaktif') {
-          setErrorMsg(`Akun "${matchedAccount.satkerName}" saat ini non-aktif. Hubungi Admin Keuangan.`);
-          return;
-        }
-        setErrorMsg('');
-        onLogin('satker', matchedAccount.username, matchedAccount.satkerName);
-      } else {
-        setErrorMsg('Username tidak terdaftar. Hubungi Admin Keuangan untuk pendaftaran akun Satker.');
-      }
+      setErrorMsg('Username tidak terdaftar. Hubungi Admin Keuangan untuk pendaftaran akun.');
     }
   };
 
@@ -142,6 +169,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   className="w-full bg-slate-50/80 border border-slate-300 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 font-semibold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all shadow-xs"
                 />
               </div>
+            </div>
+
+            {/* Password Input */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-800 flex items-center justify-between">
+                <span>Password / Kata Kunci</span>
+                <span className="text-[10px] text-slate-400 font-normal">(Opsional jika diisi admin)</span>
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errorMsg) setErrorMsg('');
+                  }}
+                  placeholder="Masukkan Password (jika ada)"
+                  className="w-full bg-slate-50/80 border border-slate-300 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 font-semibold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all shadow-xs"
+                />
+              </div>
               {errorMsg && (
                 <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold mt-2">
                   <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
@@ -149,7 +197,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 </div>
               )}
               <p className="text-[10px] text-slate-500 font-medium pt-1">
-                *Satker Kejari menggunakan username akun yang dibuat oleh Admin Keuangan. Akun internal Kejati login menggunakan NIP/Username resmi.
+                *Satker Kejari menggunakan username akun yang telah didaftarkan.
               </p>
             </div>
 
