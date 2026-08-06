@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 
 // Custom User Firebase Configuration for ba-bun
@@ -16,6 +17,7 @@ export const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 // Optional Analytics initialization if supported in environment
 if (typeof window !== 'undefined') {
@@ -25,3 +27,5 @@ if (typeof window !== 'undefined') {
     }
   }).catch(() => {});
 }
+
+

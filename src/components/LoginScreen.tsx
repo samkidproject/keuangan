@@ -77,17 +77,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             </div>
             <div>
               <h1 className="text-base font-black text-slate-900 tracking-tight">
-                SIP-BUN Kejati Lampung
+                Portal BA-BUN Kejati Lampung
               </h1>
               <p className="text-[11px] text-slate-500 font-medium">
-                Sistem Informasi Entry & Verifikasi Permohonan BA BUN
+                Portal Pengajuan & Verifikasi Permohonan BA BUN
               </p>
             </div>
           </div>
 
           <div className="hidden sm:flex items-center gap-2 bg-amber-50/80 px-3.5 py-1.5 rounded-full border border-amber-200 text-xs text-amber-900 font-bold shadow-2xs">
             <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            <span>Database Firebase Firestore & Berkas URL</span>
+            <span>Jangan Lupa Shalat ya :)</span>
           </div>
         </div>
       </header>

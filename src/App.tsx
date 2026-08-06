@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { SubmissionItem, UserRole, FilterState, VerificationStatus, AuditChecklist, SatkerAccount } from './types';
 import { INITIAL_SUBMISSIONS } from './data/initialData';
 import { 
@@ -8,7 +9,9 @@ import {
   cleanLegacyDemoItems,
   subscribeToSatkerAccounts,
   saveSatkerAccountToFirestore,
-  deleteSatkerAccountFromFirestore
+  saveAllSatkerAccountsToFirestore,
+  deleteSatkerAccountFromFirestore,
+  syncLocalSubmissionsToFirestore
 } from './lib/firestoreService';
 import { LoginScreen } from './components/LoginScreen';
 import { Navbar } from './components/Navbar';
@@ -114,6 +117,9 @@ export default function App() {
   const [isSatkerModalOpen, setIsSatkerModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Firestore Error Banner State
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
+
   // Save to LocalStorage whenever submissions change
   useEffect(() => {
     try {
@@ -130,19 +136,77 @@ export default function App() {
 
     const unsubscribeSubmissions = subscribeToSubmissions(
       (firestoreItems) => {
-        setSubmissions(firestoreItems || []);
+        if (firestoreItems && firestoreItems.length > 0) {
+          setSubmissions(firestoreItems);
+          setFirestoreError(null);
+        } else {
+          // If Firestore is empty, sync existing local submissions to Firestore
+          try {
+            const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setSubmissions(parsed);
+                syncLocalSubmissionsToFirestore(parsed);
+              }
+            }
+          } catch (e) {
+            console.error("Local submissions sync error:", e);
+          }
+        }
       },
       (err) => {
-        console.warn('Firestore subscription fallback:', err);
+        console.warn('Firestore submission subscription error:', err);
+        setFirestoreError(err?.message || String(err));
+        try {
+          const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setSubmissions(parsed);
+            }
+          }
+        } catch (e) {
+          console.error("Local fallback error:", e);
+        }
       }
     );
 
     const unsubscribeAccounts = subscribeToSatkerAccounts(
       (firestoreAccounts) => {
-        setSatkerAccounts(firestoreAccounts || []);
+        if (firestoreAccounts && firestoreAccounts.length > 0) {
+          setSatkerAccounts(firestoreAccounts);
+          setFirestoreError(null);
+        } else {
+          // If Firestore is empty, sync existing local accounts to Firestore
+          try {
+            const savedAccs = localStorage.getItem(LOCAL_STORAGE_ACCOUNTS_KEY);
+            if (savedAccs) {
+              const parsed = JSON.parse(savedAccs);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setSatkerAccounts(parsed);
+                saveAllSatkerAccountsToFirestore(parsed);
+              }
+            }
+          } catch (e) {
+            console.error("Local accounts sync error:", e);
+          }
+        }
       },
       (err) => {
-        console.warn('Firestore accounts subscription fallback:', err);
+        console.warn('Firestore accounts subscription error:', err);
+        setFirestoreError(err?.message || String(err));
+        try {
+          const savedAccs = localStorage.getItem(LOCAL_STORAGE_ACCOUNTS_KEY);
+          if (savedAccs) {
+            const parsed = JSON.parse(savedAccs);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setSatkerAccounts(parsed);
+            }
+          }
+        } catch (e) {
+          console.error("Local accounts fallback error:", e);
+        }
       }
     );
 
@@ -541,7 +605,45 @@ export default function App() {
       {/* Main Content Dashboard */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 relative z-10">
         
+        {/* Firestore Rules Instructions Banner if permission issue occurs */}
+        {firestoreError && (
+          <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4.5 shadow-sm text-xs text-slate-800 space-y-2.5 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-black text-amber-950 text-sm">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+                <span>Petunjuk Sinkronisasi Firebase Firestore (Project 'ba-bun')</span>
+              </div>
+              <button 
+                onClick={() => setFirestoreError(null)}
+                className="text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-amber-200/50 font-bold text-xs"
+              >
+                Tutup ✕
+              </button>
+            </div>
+            <p className="text-slate-700 leading-relaxed font-medium">
+              Database Firebase di Google Cloud saat ini membatasi hak akses (Rules default masih mengunci data). Agar data dapat tersimpan & tersinkronisasi antar device melalui project <strong className="font-extrabold text-amber-950">ba-bun</strong>, ikuti 3 langkah berikut di Firebase Console:
+            </p>
+            <div className="bg-slate-900 text-amber-300 font-mono text-[11px] p-3.5 rounded-xl border border-slate-800 space-y-1.5 shadow-inner">
+              <p className="text-slate-400 font-sans font-extrabold text-[10px] uppercase tracking-wider">Langkah Konfigurasi di Firebase Console:</p>
+              <p>1. Buka <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="underline text-amber-400 font-bold">console.firebase.google.com</a> → Pilih Project <strong>ba-bun</strong> → <strong>Firestore Database</strong> → Tab <strong>Rules</strong></p>
+              <p>2. Salin dan ganti aturan keamanan menjadi:</p>
+              <pre className="text-emerald-400 bg-slate-950 p-2.5 rounded-lg border border-slate-800 my-1 overflow-x-auto text-[11px] leading-snug">
+{`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}`}
+              </pre>
+              <p>3. Klik tombol <strong className="text-white bg-amber-600 px-1.5 py-0.5 rounded text-[10px]">Publish</strong>. Data dari semua device akan langsung tersambung otomatis!</p>
+            </div>
+          </div>
+        )}
+
         {/* Metric KPI Overview */}
+
         <StatsCards items={submissions} currentRole={currentRole} />
 
         {/* View Display (Column Board or Table View) */}

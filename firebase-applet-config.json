@@ -1,9 +1,12 @@
 {
-  "projectId": "ba-bun",
-  "appId": "1:812134788785:web:741d9d86483b2b189b7c90",
-  "apiKey": "AIzaSyAWZPW-Ff_B404d0OikYYVkIeE8HGHeqyA",
-  "authDomain": "ba-bun.firebaseapp.com",
-  "storageBucket": "ba-bun.firebasestorage.app",
-  "messagingSenderId": "812134788785",
-  "measurementId": "G-WZFFRMM5GL"
+  "projectId": "swift-algebra-qmln4",
+  "appId": "1:758171216490:web:e602962cc81c35549a7813",
+  "apiKey": "AIzaSyCuUZ2X14ny4-pPDV4T66VaTQvJqx9dAaA",
+  "authDomain": "swift-algebra-qmln4.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-dashboardsubbagi-70a10306-d9c4-44ca-b923-1e0865794df3",
+  "storageBucket": "swift-algebra-qmln4.firebasestorage.app",
+  "messagingSenderId": "758171216490",
+  "measurementId": "",
+  "oAuthClientId": "758171216490-sv3nbub40u95r6bhdmc2j9siaf8rqg7q.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

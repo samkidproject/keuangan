@@ -7,5 +7,8 @@ service cloud.firestore {
     match /satker_accounts/{accountId} {
       allow read, write: if true;
     }
+    match /{document=**} {
+      allow read, write: if true;
+    }
   }
 }

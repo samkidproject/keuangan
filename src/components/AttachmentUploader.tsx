@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, Link as LinkIcon, FileText, Check, Trash2, FileCheck, ExternalLink, AlertCircle } from 'lucide-react';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../lib/firebase';
 
 interface AttachmentUploaderProps {
   fileUrl: string;
@@ -19,9 +21,9 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
   accentColor = 'amber'
 }) => {
   const [mode, setMode] = useState<'upload' | 'link'>(
-    fileUrl.startsWith('data:') ? 'upload' : 'link'
+    fileUrl && (fileUrl.startsWith('data:') || fileUrl.includes('firebasestorage')) ? 'upload' : 'link'
   );
-  const [linkInput, setLinkInput] = useState<string>(fileUrl.startsWith('data:') ? '' : fileUrl);
+  const [linkInput, setLinkInput] = useState<string>(fileUrl && (fileUrl.startsWith('data:') || fileUrl.includes('firebasestorage')) ? '' : fileUrl);
   const [nameInput, setNameInput] = useState<string>(fileName);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [fileSizeStr, setFileSizeStr] = useState<string>('');
@@ -62,7 +64,7 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
     }
   }[accentColor];
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -80,22 +82,48 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
       : `${(file.size / 1024).toFixed(1)} KB`;
     setFileSizeStr(sizeFormatted);
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
+    // 1. Upload to Firebase Storage (Blaze Plan supported up to 30MB)
+    try {
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const storagePath = `attachments/${Date.now()}_${cleanFileName}`;
+      const fileRef = ref(storage, storagePath);
+      
+      const snapshot = await uploadBytes(fileRef, file);
+      const downloadUrl = await getDownloadURL(snapshot.ref);
+
       const uploadedName = file.name;
       setNameInput(uploadedName);
-      onFileChange(dataUrl, uploadedName);
+      onFileChange(downloadUrl, uploadedName);
       setIsUploading(false);
-    };
+      return;
+    } catch (storageErr: any) {
+      console.error("Firebase Storage upload error:", storageErr);
+      const errMsg = storageErr?.message || 'Gagal mengunggah ke Firebase Storage';
+      
+      // Fallback to base64 if file is small (< 700KB)
+      if (file.size <= 700 * 1024) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const dataUrl = event.target?.result as string;
+          const uploadedName = file.name;
+          setNameInput(uploadedName);
+          onFileChange(dataUrl, uploadedName);
+          setIsUploading(false);
+        };
+        reader.onerror = () => {
+          setUploadError('Gagal membaca file.');
+          setIsUploading(false);
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
 
-    reader.onerror = () => {
-      setUploadError('Gagal membaca file. Silakan coba file lain atau sertakan Link URL.');
+      setUploadError(`Gagal mengunggah ke Firebase Storage: ${errMsg}. Pastikan Firebase Storage Rules di Console Firebase 'ba-bun' mengizinkan Akses Baca/Tulis (allow read, write: if true;) atau gunakan tab 'Tulis Link URL'.`);
       setIsUploading(false);
-    };
-
-    reader.readAsDataURL(file);
+      return;
+    }
   };
+
 
   const handleLinkChange = (newLink: string) => {
     setLinkInput(newLink);
@@ -164,7 +192,7 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
       {/* Upload File Mode */}
       {mode === 'upload' ? (
         <div className="space-y-2">
-          {fileUrl && fileUrl.startsWith('data:') ? (
+          {fileUrl && (fileUrl.startsWith('data:') || fileUrl.includes('firebasestorage') || fileUrl.includes('https://')) ? (
             <div className={`p-3 rounded-xl border ${colorClasses.border} ${colorClasses.bgLight} flex items-center justify-between gap-3 shadow-2xs`}>
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className={`p-2 rounded-lg ${colorClasses.button} shrink-0`}>

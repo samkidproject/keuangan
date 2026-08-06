@@ -13,8 +13,53 @@ import { SubmissionItem, SatkerAccount } from '../types';
 const SUBMISSIONS_COLLECTION = 'submissions';
 const ACCOUNTS_COLLECTION = 'satker_accounts';
 
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: null,
+      email: null,
+      emailVerified: null,
+      isAnonymous: null,
+      tenantId: null,
+      providerInfo: []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  return new Error(JSON.stringify(errInfo));
+}
+
 // Helper to remove undefined fields before saving to Firestore
 function cleanForFirestore(obj: any): any {
+
   if (obj === null || obj === undefined) return null;
   if (Array.isArray(obj)) return obj.map(cleanForFirestore);
   if (typeof obj === 'object') {
@@ -120,13 +165,16 @@ export async function deleteSatkerAccountFromFirestore(accountId: string) {
 // Save or merge a single submission in Firestore
 export async function saveSubmissionToFirestore(item: SubmissionItem) {
   try {
-    const docId = item.submissionId || item.id;
+    const rawId = item.submissionId || item.id || `sub-${Date.now()}`;
+    // Replace slashes in docId to prevent invalid nested subcollection path errors in Firestore
+    const docId = rawId.replace(/\//g, '_');
     const docRef = doc(db, SUBMISSIONS_COLLECTION, docId);
     const cleanedData = cleanForFirestore({
       ...item,
       updatedAt: new Date().toISOString()
     });
     await setDoc(docRef, cleanedData, { merge: true });
+    console.log(`Successfully saved submission ${docId} to Firebase Firestore.`);
   } catch (err) {
     console.error('Failed to save submission to Firestore:', err);
     throw err;
@@ -134,8 +182,9 @@ export async function saveSubmissionToFirestore(item: SubmissionItem) {
 }
 
 // Delete a single submission from Firestore
-export async function deleteSubmissionFromFirestore(docId: string) {
+export async function deleteSubmissionFromFirestore(rawId: string) {
   try {
+    const docId = rawId.replace(/\//g, '_');
     const docRef = doc(db, SUBMISSIONS_COLLECTION, docId);
     await deleteDoc(docRef);
   } catch (err) {
@@ -143,6 +192,34 @@ export async function deleteSubmissionFromFirestore(docId: string) {
     throw err;
   }
 }
+
+// Sync missing local items to Firestore
+export async function syncLocalSubmissionsToFirestore(localItems: SubmissionItem[]) {
+  if (!localItems || localItems.length === 0) return;
+  try {
+    const batch = writeBatch(db);
+    let count = 0;
+    for (const item of localItems) {
+      if (!item) continue;
+      const rawId = item.submissionId || item.id;
+      if (!rawId) continue;
+      const docId = rawId.replace(/\//g, '_');
+      const docRef = doc(db, SUBMISSIONS_COLLECTION, docId);
+      batch.set(docRef, cleanForFirestore({
+        ...item,
+        updatedAt: new Date().toISOString()
+      }), { merge: true });
+      count++;
+    }
+    if (count > 0) {
+      await batch.commit();
+      console.log(`Synced ${count} local submission(s) to Firebase Firestore.`);
+    }
+  } catch (err) {
+    console.warn('Failed to sync local submissions to Firestore:', err);
+  }
+}
+
 
 // Clean legacy sample items from Firestore if present
 export async function cleanLegacyDemoItems() {
