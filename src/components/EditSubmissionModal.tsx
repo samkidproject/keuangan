@@ -59,8 +59,11 @@ export const EditSubmissionModal: React.FC<EditSubmissionModalProps> = ({
     }
   };
 
+  const isApproved = item.status === 'selesai_keuangan' || (item.financeStatus && item.financeStatus.toLowerCase().includes('disetujui'));
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isApproved) return;
     const numericNominal = parseFloat(nominal.replace(/\./g, '')) || 0;
     onSaveEdit(item.id || item.submissionId, {
       satker: satker.trim(),
@@ -108,6 +111,13 @@ export const EditSubmissionModal: React.FC<EditSubmissionModalProps> = ({
 
         {/* Modal Form */}
         <form onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-4 text-xs">
+          
+          {isApproved && (
+            <div className="p-3 bg-amber-100 border border-amber-300 rounded-xl text-amber-950 font-bold text-xs flex items-center gap-2">
+              <span>🔒</span>
+              <span>Pengajuan ini telah disetujui Keuangan (Selesai Keuangan). Data permohonan utama tidak dapat diubah oleh Satker. Gunakan menu SPP untuk mengunggah dokumen SPP.</span>
+            </div>
+          )}
           
           {/* Satker & Bidang Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

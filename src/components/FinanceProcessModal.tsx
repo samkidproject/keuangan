@@ -451,13 +451,28 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
                   </span>
                 </div>
 
-                <div className="bg-white p-3 rounded-lg border border-slate-200 text-slate-800">
-                  <div className="text-[11px] font-bold text-amber-800 mb-1">
-                    Rekomendasi Auditor:
+                <div className="bg-white p-3 rounded-lg border border-slate-200 text-slate-800 space-y-2">
+                  <div className="flex items-center justify-between bg-emerald-50/80 p-2 rounded-lg border border-emerald-200">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-slate-600 block">Nominal Permohonan Satker:</span>
+                      <span className="text-xs font-bold text-slate-800">{formatCurrency(item.nominal)}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] font-black text-emerald-950 block">Rekomendasi Nominal Disetujui Auditor:</span>
+                      <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300 inline-block mt-0.5">
+                        {formatCurrency(item.auditorApprovedNominal ?? item.nominal)}
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-xs font-semibold italic text-slate-900">
-                    "{item.auditorRecommendation || 'Belum ada catatan dari Admin Auditor'}"
-                  </p>
+
+                  <div>
+                    <div className="text-[11px] font-bold text-amber-800 mb-0.5">
+                      Catatan Rekomendasi Auditor:
+                    </div>
+                    <p className="text-xs font-semibold italic text-slate-900">
+                      "{item.auditorRecommendation || 'Belum ada catatan dari Admin Auditor'}"
+                    </p>
+                  </div>
                   {item.auditorName && (
                     <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between border-t border-slate-100 pt-1 font-medium">
                       <span>Auditor: <strong className="text-slate-800">{item.auditorName}</strong></span>

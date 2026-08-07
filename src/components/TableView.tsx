@@ -31,6 +31,7 @@ interface TableViewProps {
   onOpenEditModal?: (item: SubmissionItem) => void;
   onOpenDeleteModal?: (item: SubmissionItem) => void;
   onDeleteSubmission?: (id: string, submissionId?: string) => void;
+  onClaimSubmission?: (itemId: string, auditorName: string, action: 'claim' | 'release') => void;
 }
 
 export const TableView: React.FC<TableViewProps> = ({
@@ -45,6 +46,7 @@ export const TableView: React.FC<TableViewProps> = ({
   onOpenEditModal,
   onOpenDeleteModal,
   onDeleteSubmission,
+  onClaimSubmission,
 }) => {
 
   // Filter base items for auditor and keuangan roles (strictly only see items with Nota Dinas attached / entered auditor stage)
@@ -58,6 +60,15 @@ export const TableView: React.FC<TableViewProps> = ({
   // Get unique Satkers & Bidangs for filters
   const satkerOptions = Array.from(new Set(roleBaseItems.map(i => i.satker))).sort();
   const bidangOptions = Array.from(new Set(roleBaseItems.map(i => i.bidang))).sort();
+
+  const formatCurrency = (val?: number) => {
+    if (!val) return 'Rp 0';
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      maximumFractionDigits: 0
+    }).format(val);
+  };
 
   // Filter items based on filter state
   const filteredItems = roleBaseItems.filter(item => {
@@ -253,6 +264,8 @@ export const TableView: React.FC<TableViewProps> = ({
                 </tr>
               ) : (
                 filteredItems.map((item, idx) => {
+                  const isApprovedByKeuangan = item.status === 'selesai_keuangan' || (item.financeStatus && item.financeStatus.toLowerCase().includes('disetujui'));
+
                   return (
                     <tr 
                       key={item.id}
@@ -274,6 +287,17 @@ export const TableView: React.FC<TableViewProps> = ({
                             <span className="text-amber-950 font-extrabold text-xs leading-snug line-clamp-2" title={item.jenisPengajuan || 'Permohonan Anggaran BA BUN'}>
                               {item.jenisPengajuan || 'Permohonan Anggaran BA BUN'}
                             </span>
+
+                            <div className="text-emerald-800 font-extrabold text-xs mt-1">
+                              Nominal: {formatCurrency(item.nominal)}
+                            </div>
+
+                            {item.auditorApprovedNominal && (
+                              <div className="text-[10px] text-emerald-950 font-black bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded w-fit mt-0.5" title="Nominal Direkomendasikan Auditor">
+                                Disetujui Auditor: {formatCurrency(item.auditorApprovedNominal)}
+                              </div>
+                            )}
+
                             {item.sppNumber && (
                               <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-950 border border-emerald-300 text-[10px] font-black">
                                 <FileCheck className="h-3 w-3 text-emerald-700" />
@@ -341,6 +365,23 @@ export const TableView: React.FC<TableViewProps> = ({
                       <td className="py-3.5 px-3.5 space-y-1.5">
                         <div>{getStatusBadge(item.status, item)}</div>
                         {renderStatusProgress(item.status)}
+                        
+                        {item.assignedAuditor ? (
+                          <div className="text-[10px] text-purple-950 font-black bg-purple-100 border border-purple-300 px-2 py-0.5 rounded-md w-fit flex items-center gap-1 shadow-2xs" title="Berkas sedang dikeep/ditelaah oleh Auditor ini">
+                            <span className="shrink-0">📌</span>
+                            <span className="truncate max-w-[180px]">Dikeep: {item.assignedAuditor}</span>
+                          </div>
+                        ) : item.auditorName ? (
+                          <div className="text-[10px] text-purple-900 font-bold bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded w-fit flex items-center gap-1" title="Auditor Penanggung Jawab Review">
+                            <span className="shrink-0">🔍</span>
+                            <span className="truncate max-w-[180px]">{item.auditorName}</span>
+                          </div>
+                        ) : (
+                          <div className="text-[9px] text-slate-400 font-medium italic">
+                            🔓 Belum Dikeep
+                          </div>
+                        )}
+
                         {item.auditorRecommendation && (
                           <div className="text-[10px] text-slate-600 italic line-clamp-1 max-w-[220px]" title={item.auditorRecommendation}>
                             "{item.auditorRecommendation}"
@@ -436,8 +477,8 @@ export const TableView: React.FC<TableViewProps> = ({
                             </button>
                           )}
 
-                          {/* Edit Entry Submission (Satker) */}
-                          {currentRole === 'satker' && onOpenEditModal && (
+                          {/* Edit Entry Submission (Satker) - Disabled if already approved by Keuangan */}
+                          {currentRole === 'satker' && !isApprovedByKeuangan && onOpenEditModal && (
                             <button
                               type="button"
                               onClick={() => onOpenEditModal(item)}
@@ -449,8 +490,8 @@ export const TableView: React.FC<TableViewProps> = ({
                             </button>
                           )}
 
-                          {/* Delete Action */}
-                          {(onOpenDeleteModal || onDeleteSubmission) && (
+                          {/* Delete Action - Disabled for Satker if already approved by Keuangan */}
+                          {(onOpenDeleteModal || onDeleteSubmission) && (!isApprovedByKeuangan || currentRole !== 'satker') && (
                             <button
                               type="button"
                               onClick={() => {

@@ -60,10 +60,14 @@ export interface SubmissionItem {
   notaDinasCreatedAt?: string;
   notaDinasNotes?: string;
 
-  // Auditor Verification fields
+  // Auditor Verification & Lock fields
   auditorRecommendation?: string;
   auditorNotes?: string;
   auditorName?: string;
+  assignedAuditor?: string;
+  auditorLockStatus?: 'unlocked' | 'in_progress' | 'completed';
+  auditorLockedAt?: string;
+  auditorApprovedNominal?: number;
   verifiedAt?: string;
 
   // Final Finance Approval fields

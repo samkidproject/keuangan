@@ -254,6 +254,15 @@ export default function App() {
   };
 
   const handleDeleteSubmission = async (docId: string, submissionId?: string) => {
+    const target = submissions.find(s => s.id === docId || s.submissionId === docId || (submissionId && (s.id === submissionId || s.submissionId === submissionId)));
+    if (currentRole === 'satker' && target) {
+      const isApproved = target.status === 'selesai_keuangan' || (target.financeStatus && target.financeStatus.toLowerCase().includes('disetujui'));
+      if (isApproved) {
+        showToast(`⚠️ Pengajuan yang sudah disetujui Keuangan tidak dapat dihapus oleh Satker.`);
+        return;
+      }
+    }
+
     try {
       if (docId) await deleteSubmissionFromFirestore(docId);
       if (submissionId && submissionId !== docId) {
@@ -268,6 +277,68 @@ export default function App() {
     }
   };
 
+  // Keep / Claim Submission Handler for Auditor Team
+  const handleClaimSubmission = async (
+    itemId: string,
+    auditorName: string,
+    action: 'claim' | 'release'
+  ) => {
+    const now = getWIBTimestamp();
+    const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
+    if (!targetItem) return;
+
+    let updatedItem: SubmissionItem;
+    const nameToUse = auditorName.trim() || 'Auditor Kejati';
+
+    if (action === 'claim') {
+      const newLog = {
+        id: `log-keep-${Date.now()}`,
+        timestamp: now,
+        userRole: 'auditor' as UserRole,
+        userName: nameToUse,
+        action: `📌 KEEP / KLAIM BERKAS AUDITOR`,
+        note: `Berkas diklaim & dikeep untuk ditelaah oleh: ${nameToUse}`
+      };
+
+      updatedItem = {
+        ...targetItem,
+        assignedAuditor: nameToUse,
+        auditorName: nameToUse,
+        auditorLockStatus: 'in_progress',
+        auditorLockedAt: now,
+        history: [newLog, ...(targetItem.history || [])]
+      };
+      showToast(`📌 Berkas berhasil dikeep oleh ${nameToUse}`);
+    } else {
+      const newLog = {
+        id: `log-release-${Date.now()}`,
+        timestamp: now,
+        userRole: 'auditor' as UserRole,
+        userName: nameToUse,
+        action: `🔓 RELEASING / BUKA KEEP BERKAS`,
+        note: `Keep/Klaim berkas dilepas dan dibuka kembali untuk auditor lain.`
+      };
+
+      updatedItem = {
+        ...targetItem,
+        assignedAuditor: undefined,
+        auditorLockStatus: 'unlocked',
+        auditorLockedAt: undefined,
+        history: [newLog, ...(targetItem.history || [])]
+      };
+      showToast(`🔓 Keep / Klaim berkas dilepas.`);
+    }
+
+    // Optimistic UI update
+    setSubmissions(prev => prev.map(item => (item.id === itemId || item.submissionId === itemId) ? updatedItem : item));
+
+    try {
+      await saveSubmissionToFirestore(updatedItem);
+    } catch (e) {
+      console.error("Error saving keep status to Firestore:", e);
+    }
+  };
+
   // Save Auditor Verification & Checklist
   const handleSaveAuditorVerification = async (
     itemId: string,
@@ -275,19 +346,23 @@ export default function App() {
     checklist: AuditChecklist,
     recommendation: string,
     notes: string,
-    auditorName: string
+    auditorName: string,
+    approvedNominal?: number
   ) => {
     const now = getWIBTimestamp();
     const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
     if (!targetItem) return;
 
+    const finalNominal = approvedNominal ?? targetItem.auditorApprovedNominal ?? targetItem.nominal ?? 0;
+    const finalAuditorName = auditorName.trim() || targetItem.assignedAuditor || 'Auditor Kejati';
+
     const newLog = {
       id: `log-${Date.now()}`,
       timestamp: now,
       userRole: 'auditor' as UserRole,
-      userName: auditorName || 'Admin Auditor',
-      action: `Pemeriksaan Auditor: Status diubah ke "${status.toUpperCase()}"`,
-      note: recommendation ? `Rekomendasi: ${recommendation}` : notes
+      userName: finalAuditorName,
+      action: `Pemeriksaan Auditor: Status "${status.toUpperCase()}"`,
+      note: `Nominal Disetujui: Rp ${finalNominal.toLocaleString('id-ID')}${recommendation ? ` | Rekomendasi: ${recommendation}` : ''}`
     };
 
     const updatedItem: SubmissionItem = {
@@ -296,7 +371,10 @@ export default function App() {
       checklist,
       auditorRecommendation: recommendation,
       auditorNotes: notes,
-      auditorName,
+      auditorName: finalAuditorName,
+      assignedAuditor: finalAuditorName,
+      auditorLockStatus: 'completed',
+      auditorApprovedNominal: finalNominal,
       verifiedAt: now,
       history: [newLog, ...(targetItem.history || [])]
     };
@@ -496,6 +574,14 @@ export default function App() {
     const now = getWIBTimestamp();
     const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
     if (!targetItem) return;
+
+    if (currentRole === 'satker') {
+      const isApproved = targetItem.status === 'selesai_keuangan' || (targetItem.financeStatus && targetItem.financeStatus.toLowerCase().includes('disetujui'));
+      if (isApproved) {
+        showToast(`⚠️ Pengajuan yang telah disetujui Keuangan tidak dapat di-edit oleh Satker.`);
+        return;
+      }
+    }
 
     const newLog = {
       id: `log-edit-${Date.now()}`,
@@ -710,6 +796,7 @@ service cloud.firestore {
             onOpenEditModal={(item) => setEditModalItem(item)}
             onOpenDeleteModal={(item) => setDeleteModalItem(item)}
             onDeleteSubmission={handleDeleteSubmission}
+            onClaimSubmission={handleClaimSubmission}
           />
         ) : (
           <TableView
@@ -724,6 +811,7 @@ service cloud.firestore {
             onOpenEditModal={(item) => setEditModalItem(item)}
             onOpenDeleteModal={(item) => setDeleteModalItem(item)}
             onDeleteSubmission={handleDeleteSubmission}
+            onClaimSubmission={handleClaimSubmission}
           />
         )}
 
@@ -749,6 +837,7 @@ service cloud.firestore {
         satkerAccounts={satkerAccounts}
         onClose={() => setAuditorModalItem(null)}
         onSaveVerification={handleSaveAuditorVerification}
+        onClaimSubmission={handleClaimSubmission}
       />
 
       {/* Finance Process Modal */}

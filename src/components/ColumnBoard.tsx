@@ -28,6 +28,7 @@ interface ColumnBoardProps {
   onOpenEditModal?: (item: SubmissionItem) => void;
   onOpenDeleteModal?: (item: SubmissionItem) => void;
   onDeleteSubmission?: (id: string, submissionId?: string) => void;
+  onClaimSubmission?: (itemId: string, auditorName: string, action: 'claim' | 'release') => void;
 }
 
 interface ColumnConfig {
@@ -153,6 +154,7 @@ export const ColumnBoard: React.FC<ColumnBoardProps> = ({
               ) : (
                 colItems.map(item => {
                   const checklistCount = Object.values(item.checklist).filter(Boolean).length;
+                  const isApprovedByKeuangan = item.status === 'selesai_keuangan' || (item.financeStatus && item.financeStatus.toLowerCase().includes('disetujui'));
 
                   return (
                     <div
@@ -212,6 +214,23 @@ export const ColumnBoard: React.FC<ColumnBoardProps> = ({
                           <span className="text-[10px] text-slate-400 font-medium">Nilai Anggaran:</span>
                           <span className="text-amber-400 font-extrabold">{formatCurrency(item.nominal)}</span>
                         </div>
+                        {item.auditorApprovedNominal && (
+                          <div className="flex items-center justify-between text-[11px] text-emerald-400 font-bold pt-0.5 bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-500/30">
+                            <span className="text-[10px] text-emerald-300 font-medium">Disetujui Auditor:</span>
+                            <span className="text-emerald-300 font-black">{formatCurrency(item.auditorApprovedNominal)}</span>
+                          </div>
+                        )}
+                        {item.assignedAuditor ? (
+                          <div className="flex items-center gap-1 text-[10px] text-purple-200 font-extrabold bg-purple-950/80 px-2 py-0.5 rounded-md border border-purple-400/50 shadow-2xs">
+                            <span>📌 Dikeep:</span>
+                            <span className="truncate max-w-[150px]">{item.assignedAuditor}</span>
+                          </div>
+                        ) : item.auditorName ? (
+                          <div className="flex items-center gap-1 text-[10px] text-purple-300 font-bold bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-500/30">
+                            <span>🔍 Penelaah:</span>
+                            <span className="truncate max-w-[150px]">{item.auditorName}</span>
+                          </div>
+                        ) : null}
                       </div>
 
                       {/* Document File Link */}
@@ -369,7 +388,7 @@ export const ColumnBoard: React.FC<ColumnBoardProps> = ({
                             </button>
                           )}
 
-                          {currentRole === 'satker' && onOpenEditModal && (
+                          {currentRole === 'satker' && !isApprovedByKeuangan && onOpenEditModal && (
                             <button
                               type="button"
                               onClick={() => onOpenEditModal(item)}
@@ -380,7 +399,7 @@ export const ColumnBoard: React.FC<ColumnBoardProps> = ({
                             </button>
                           )}
 
-                          {(onOpenDeleteModal || onDeleteSubmission) && (
+                          {(onOpenDeleteModal || onDeleteSubmission) && (!isApprovedByKeuangan || currentRole !== 'satker') && (
                             <button
                               type="button"
                               onClick={() => {

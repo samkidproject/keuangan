@@ -16,8 +16,20 @@ import {
   Sparkles,
   MessageSquare,
   Phone,
-  User
+  User,
+  Users,
+  Lock,
+  UserPlus
 } from 'lucide-react';
+
+export const AUDITOR_TEAM_MEMBERS = [
+  'Bpk. Hendra S., S.E. (Auditor Utama)',
+  'Bpk. Budi Raharjo, S.H. (Auditor II)',
+  'Ibu Siti Aminah, S.E., M.Si. (Auditor III)',
+  'Bpk. Ahmad Fauzi, S.H., M.H. (Auditor IV)',
+  'Ibu Rina Wati, S.E. (Auditor V)',
+  'Bpk. Doni Prasetyo, S.H. (Auditor VI)',
+];
 
 interface AuditorVerifyModalProps {
   item: SubmissionItem | null;
@@ -30,7 +42,13 @@ interface AuditorVerifyModalProps {
     checklist: AuditChecklist,
     recommendation: string,
     notes: string,
-    auditorName: string
+    auditorName: string,
+    approvedNominal?: number
+  ) => void;
+  onClaimSubmission?: (
+    itemId: string,
+    auditorName: string,
+    action: 'claim' | 'release'
   ) => void;
 }
 
@@ -40,6 +58,7 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
   onClose,
   satkerAccounts = [],
   onSaveVerification,
+  onClaimSubmission,
 }) => {
   if (!isOpen || !item) return null;
 
@@ -61,7 +80,8 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
   });
   const [recommendation, setRecommendation] = useState<string>(item.auditorRecommendation || '');
   const [notes, setNotes] = useState<string>(item.auditorNotes || '');
-  const [auditorName, setAuditorName] = useState<string>(item.auditorName || 'Bpk. Hendra S., S.E. (Auditor Utama)');
+  const [auditorName, setAuditorName] = useState<string>(item.auditorName || item.assignedAuditor || 'Auditor Kejati');
+  const [approvedNominalStr, setApprovedNominalStr] = useState<string>('');
 
   useEffect(() => {
     if (item) {
@@ -75,7 +95,9 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
       });
       setRecommendation(item.auditorRecommendation || '');
       setNotes(item.auditorNotes || '');
-      setAuditorName(item.auditorName || 'Bpk. Hendra S., S.E. (Auditor Utama)');
+      setAuditorName(item.auditorName || item.assignedAuditor || 'Auditor Kejati');
+      const initVal = item.auditorApprovedNominal ?? item.nominal;
+      setApprovedNominalStr(initVal ? new Intl.NumberFormat('id-ID').format(initVal) : '');
     }
   }, [item]);
 
@@ -100,7 +122,8 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveVerification(item.id, status, checklist, recommendation, notes, auditorName);
+    const parsedNominal = parseFloat(approvedNominalStr.replace(/\./g, '')) || item.nominal || 0;
+    onSaveVerification(item.id, status, checklist, recommendation, notes, auditorName, parsedNominal);
     onClose();
   };
 
@@ -148,6 +171,73 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
         {/* Modal Body */}
         <form onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-5 flex-1 custom-scrollbar text-xs">
           
+          {/* Keep / Claim System Banner (Anti-Collision for Auditor Team) */}
+          <div className="bg-purple-50 p-4 rounded-xl border border-purple-200 space-y-3 text-purple-950">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2 font-black text-xs">
+                <Lock className="h-4 w-4 text-purple-700 shrink-0" />
+                <span>Proteksi Bentrok Auditor (Sistem Keep / Klaim Berkas)</span>
+              </div>
+              {item.assignedAuditor ? (
+                <span className="px-2.5 py-1 rounded-full bg-purple-200 text-purple-950 font-black text-[10px] border border-purple-300 flex items-center gap-1 shadow-2xs">
+                  <span className="h-1.5 w-1.5 rounded-full bg-purple-700 animate-pulse"></span>
+                  📌 Dikeep oleh: {item.assignedAuditor}
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                  🔓 Belum Dikeep (Bisa Diklaim)
+                </span>
+              )}
+            </div>
+
+            <p className="text-[11px] text-purple-900 leading-relaxed font-medium">
+              Ketikkan nama Anda di bawah lalu klik tombol <strong className="font-extrabold text-purple-950">"Keep Berkas Ini"</strong> untuk mengklaim pengajuan ini sebelum melakukan pemeriksaan fisik/berkas, agar tim auditor lain tahu berkas sedang Anda tangani.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+              <div className="flex-1 relative">
+                <UserCheck className="h-4 w-4 text-purple-600 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={auditorName}
+                  onChange={(e) => setAuditorName(e.target.value)}
+                  placeholder="Ketikkan nama Anda (contoh: Auditor Budi / Bpk. Hendra S.)..."
+                  className="w-full pl-9 pr-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-black text-purple-950 placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onClaimSubmission) {
+                      onClaimSubmission(item.id, auditorName || 'Auditor Kejati', 'claim');
+                    }
+                  }}
+                  className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-black rounded-xl text-xs shadow-xs transition-all flex items-center gap-1 shrink-0"
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  <span>📌 Keep Berkas Ini</span>
+                </button>
+
+                {item.assignedAuditor && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onClaimSubmission) {
+                        onClaimSubmission(item.id, auditorName, 'release');
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl text-xs transition-all flex items-center gap-1 shrink-0"
+                    title="Buka kembali kunci keep agar auditor lain dapat mengambil berkas"
+                  >
+                    <span>🔓 Lepas Keep</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Item Meta Details Box */}
           <div className="bg-amber-50/50 rounded-xl p-4 border border-amber-200 space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -338,6 +428,31 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
             </div>
           </div>
 
+          {/* Recommended Nominal Input */}
+          <div className="bg-emerald-50/80 p-3.5 rounded-xl border border-emerald-300 space-y-1.5">
+            <label className="block text-xs font-black text-emerald-950 flex items-center justify-between">
+              <span>Rekomendasi Nominal Anggaran Disetujui Auditor (Rp):</span>
+              <span className="text-[10px] text-slate-500 font-normal">Permohonan Satker: Rp {(item.nominal || 0).toLocaleString('id-ID')}</span>
+            </label>
+            <input
+              type="text"
+              value={approvedNominalStr}
+              onChange={(e) => {
+                const rawVal = e.target.value.replace(/\D/g, '');
+                if (!rawVal) {
+                  setApprovedNominalStr('');
+                } else {
+                  setApprovedNominalStr(new Intl.NumberFormat('id-ID').format(parseInt(rawVal, 10)));
+                }
+              }}
+              placeholder="Contoh: 5.000.000"
+              className="w-full bg-white border border-emerald-400 rounded-xl px-3 py-2 text-xs font-black text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            <p className="text-[10px] text-slate-600 font-medium italic">
+              Auditor dapat menyetujui nominal penuh atau merekomendasikan penyesuaian jumlah nominal anggaran yang disetujui.
+            </p>
+          </div>
+
           {/* Text Area for Auditor Recommendation & Notes */}
           <div className="space-y-3">
             <div>
@@ -367,16 +482,19 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Nama Tim Auditor / Pemeriksa:
+              <label className="block text-xs font-black text-slate-800 mb-1 flex items-center justify-between">
+                <span>Nama Auditor / Penelaah (Penanggung Jawab Review):</span>
+                <span className="text-[10px] text-purple-700 font-bold">Ketikkan Nama Sendiri</span>
               </label>
+              
               <div className="flex items-center gap-2">
-                <UserCheck className="h-4 w-4 text-amber-600" />
+                <UserCheck className="h-4 w-4 text-purple-700 shrink-0" />
                 <input
                   type="text"
                   value={auditorName}
                   onChange={(e) => setAuditorName(e.target.value)}
-                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-extrabold focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  placeholder="Ketikkan nama auditor / tim pemeriksa (contoh: Auditor Budi, Bpk. Hendra S.)..."
+                  className="flex-1 bg-white border border-purple-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-extrabold focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </div>
             </div>
