@@ -399,7 +399,7 @@ export const ColumnBoard: React.FC<ColumnBoardProps> = ({
                             </button>
                           )}
 
-                          {(onOpenDeleteModal || onDeleteSubmission) && (!isApprovedByKeuangan || currentRole !== 'satker') && (
+                          {currentRole === 'satker' && !isApprovedByKeuangan && (onOpenDeleteModal || onDeleteSubmission) && (
                             <button
                               type="button"
                               onClick={() => {
