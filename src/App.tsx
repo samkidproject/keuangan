@@ -254,8 +254,13 @@ export default function App() {
   };
 
   const handleDeleteSubmission = async (docId: string, submissionId?: string) => {
+    if (currentRole !== 'satker') {
+      showToast(`⚠️ Fitur hapus pengajuan hanya diperbolehkan untuk User/Satker pemohon.`);
+      return;
+    }
+
     const target = submissions.find(s => s.id === docId || s.submissionId === docId || (submissionId && (s.id === submissionId || s.submissionId === submissionId)));
-    if (currentRole === 'satker' && target) {
+    if (target) {
       const isApproved = target.status === 'selesai_keuangan' || (target.financeStatus && target.financeStatus.toLowerCase().includes('disetujui'));
       if (isApproved) {
         showToast(`⚠️ Pengajuan yang sudah disetujui Keuangan tidak dapat dihapus oleh Satker.`);
