@@ -490,8 +490,8 @@ export const TableView: React.FC<TableViewProps> = ({
                             </button>
                           )}
 
-                          {/* Delete Action - Disabled for Satker if already approved by Keuangan */}
-                          {(onOpenDeleteModal || onDeleteSubmission) && (!isApprovedByKeuangan || currentRole !== 'satker') && (
+                          {/* Delete Action - Only for Satker user if not approved by Keuangan */}
+                          {currentRole === 'satker' && !isApprovedByKeuangan && (onOpenDeleteModal || onDeleteSubmission) && (
                             <button
                               type="button"
                               onClick={() => {
