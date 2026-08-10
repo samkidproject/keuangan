@@ -7,8 +7,10 @@ import {
   Sparkles,
   AlertCircle,
   ShieldCheck,
-  Lock
+  Lock,
+  Code2
 } from 'lucide-react';
+import { SamkidPromoModal } from './SamkidPromoModal';
 
 interface LoginScreenProps {
   onLogin: (role: UserRole, username: string, satkerName?: string) => void;
@@ -22,6 +24,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [isPromoOpen, setIsPromoOpen] = useState<boolean>(false);
 
   const processLogin = (rawUsername: string) => {
     const trimmed = rawUsername.trim().toLowerCase();
@@ -223,17 +226,41 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           </form>
 
           {/* Account Footer Note */}
-          <div className="pt-3 text-center text-[11px] text-slate-500 font-medium border-t border-slate-200/80">
-            Kejaksaan Tinggi Lampung
+          <div className="pt-3 text-center text-[11px] text-slate-500 font-medium border-t border-slate-200/80 flex items-center justify-between">
+            <span>Kejaksaan Tinggi Lampung</span>
+            <button
+              type="button"
+              onClick={() => setIsPromoOpen(true)}
+              className="text-amber-700 hover:text-amber-800 font-bold hover:underline flex items-center gap-1 transition-colors cursor-pointer"
+              title="Informasi Pengembang Aplikasi"
+            >
+              <Code2 className="h-3.5 w-3.5 text-amber-600" />
+              <span>Samkid Project</span>
+            </button>
           </div>
 
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="p-4 text-center text-xs text-slate-500 relative z-10 font-medium">
-        © 2026 Sub Bagian Keuangan Kejati Lampung.
+      <footer className="p-4 text-center text-xs text-slate-500 relative z-10 font-medium flex flex-col sm:flex-row items-center justify-center gap-2">
+        <span>© 2026 Sub Bagian Keuangan Kejati Lampung.</span>
+        <span className="hidden sm:inline text-slate-300">•</span>
+        <button 
+          type="button" 
+          onClick={() => setIsPromoOpen(true)}
+          className="text-slate-500 hover:text-amber-700 font-extrabold transition-colors flex items-center gap-1 cursor-pointer bg-white/60 hover:bg-white px-2.5 py-1 rounded-full border border-amber-200/60 shadow-2xs"
+        >
+          <Sparkles className="h-3 w-3 text-amber-500" />
+          <span>Made by Samkid Project</span>
+        </button>
       </footer>
+
+      {/* Samkid Project Developer Promo Modal */}
+      <SamkidPromoModal 
+        isOpen={isPromoOpen}
+        onClose={() => setIsPromoOpen(false)}
+      />
 
     </div>
   );
