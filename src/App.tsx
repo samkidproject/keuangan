@@ -26,6 +26,7 @@ import { SatkerManagementModal } from './components/SatkerManagementModal';
 import { ReviseSubmissionModal } from './components/ReviseSubmissionModal';
 import { EditSubmissionModal } from './components/EditSubmissionModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
+import { SamkidPromoModal } from './components/SamkidPromoModal';
 import { getWIBTimestamp } from './lib/dateUtils';
 
 import { DEFAULT_SATKER_ACCOUNTS } from './data/defaultSatkers';
@@ -143,6 +144,7 @@ export default function App() {
   const [deleteModalItem, setDeleteModalItem] = useState<SubmissionItem | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isSatkerModalOpen, setIsSatkerModalOpen] = useState<boolean>(false);
+  const [isPromoOpen, setIsPromoOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Firestore Error Banner State
@@ -823,14 +825,26 @@ service cloud.firestore {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white/90 border-t border-amber-200/80 backdrop-blur-md py-4.5 text-center text-xs text-slate-600 relative z-10 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <footer className="bg-white/90 border-t border-amber-200/80 backdrop-blur-md py-4 text-center text-xs text-slate-600 relative z-10 shadow-xs">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
             <span>Bagian Anggaran Bendahara Umum Negara • Kejati Lampung</span>
           </div>
-          <div className="text-emerald-800 font-bold flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
-            <span>Sistem Database Real-Time & Akses Berkas Link URL</span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsPromoOpen(true)}
+              className="text-[11px] font-extrabold text-amber-800 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 border border-amber-300/80 px-2.5 py-1 rounded-full transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              title="Aplikasi dibuat oleh Samkid Project"
+            >
+              <span className="text-amber-600">✨</span>
+              <span>Made by Samkid Project</span>
+            </button>
+            
+            <div className="text-emerald-800 font-bold flex items-center gap-1.5 text-[11px]">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+              <span>Database Real-Time Active</span>
+            </div>
           </div>
         </div>
       </footer>
@@ -907,6 +921,12 @@ service cloud.firestore {
         onUpdateAccount={handleUpdateSatkerAccount}
         onToggleAccountStatus={handleToggleSatkerAccountStatus}
         onDeleteAccount={handleDeleteSatkerAccount}
+      />
+
+      {/* Developer Promo Modal */}
+      <SamkidPromoModal
+        isOpen={isPromoOpen}
+        onClose={() => setIsPromoOpen(false)}
       />
 
     </div>
