@@ -27,55 +27,57 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     const trimmed = rawUsername.trim().toLowerCase();
     if (!trimmed) return;
 
-    // Check if username matches an existing account in satkerAccounts (both Satker and Internal Kejati roles)
-    const matchedAccount = satkerAccounts.find(acc => 
-      acc.username.toLowerCase() === trimmed || 
-      (trimmed === 'keuangan.babun' && acc.username.toLowerCase() === 'admin') ||
-      (trimmed === 'admin.keuangan' && acc.username.toLowerCase() === 'admin') ||
-      (trimmed === 'keuangan' && acc.username.toLowerCase() === 'admin') ||
-      (trimmed === 'verifikator.keuangan' && acc.username.toLowerCase() === 'verifikator') ||
-      (trimmed === 'auditkejati' && acc.username.toLowerCase() === 'auditor') ||
-      (trimmed === 'admin.kejati' && acc.username.toLowerCase() === 'auditor')
-    );
-
-    if (matchedAccount) {
-      if (matchedAccount.status === 'nonaktif') {
-        setErrorMsg(`Akun "${matchedAccount.satkerName}" saat ini non-aktif. Hubungi Admin Keuangan.`);
-        return;
-      }
-      
-      // If password is set on the account, check it
-      if (matchedAccount.password && matchedAccount.password.trim() !== '') {
-        if (password !== matchedAccount.password) {
-          setErrorMsg(`Password salah untuk akun "${matchedAccount.satkerName}".`);
-          return;
-        }
-      }
-
-      setErrorMsg('');
-      const matchedRole: UserRole = matchedAccount.role || (
-        (trimmed.includes('verifikator')) ? 'verifikator' :
-        (trimmed.includes('audit')) ? 'auditor' :
-        (trimmed === 'admin' || trimmed.includes('keuangan')) ? 'keuangan' : 'satker'
+    // Check if username matches an existing account in satkerAccounts (supports exact username or registered role aliases)
+    const matchedAccount = satkerAccounts.find(acc => {
+      const accUsername = acc.username.toLowerCase();
+      const accRole = acc.role || (
+        accUsername === 'admin' ? 'keuangan' :
+        accUsername === 'verifikator' ? 'verifikator' :
+        accUsername === 'auditor' ? 'auditor' : 'satker'
       );
 
-      onLogin(matchedRole, matchedAccount.username, matchedAccount.satkerName);
+      if (accUsername === trimmed) return true;
+
+      // Built-in aliases for internal Kejati roles if matching account exists
+      if (accRole === 'keuangan' && ['admin', 'keuangan', 'keuangan.babun', 'admin.keuangan'].includes(trimmed)) {
+        return true;
+      }
+      if (accRole === 'verifikator' && ['verifikator', 'verifikator.keuangan'].includes(trimmed)) {
+        return true;
+      }
+      if (accRole === 'auditor' && ['auditor', 'auditkejati', 'auditor.kejati', 'admin.kejati'].includes(trimmed)) {
+        return true;
+      }
+
+      return false;
+    });
+
+    if (!matchedAccount) {
+      setErrorMsg('Username tidak terdaftar. Hubungi Admin Keuangan untuk pendaftaran akun.');
       return;
     }
 
-    // Fallback if accounts list is not yet loaded
-    if (trimmed === 'verifikator' || trimmed === 'verifikator.keuangan') {
-      setErrorMsg('');
-      onLogin('verifikator', 'verifikator.keuangan');
-    } else if (trimmed === 'auditkejati' || trimmed === 'auditor.kejati' || trimmed === 'admin.kejati' || trimmed === 'auditor') {
-      setErrorMsg('');
-      onLogin('auditor', 'auditkejati');
-    } else if (trimmed === 'keuangan.babun' || trimmed === 'admin.keuangan' || trimmed === 'admin' || trimmed === 'keuangan') {
-      setErrorMsg('');
-      onLogin('keuangan', 'keuangan.babun');
-    } else {
-      setErrorMsg('Username tidak terdaftar. Hubungi Admin Keuangan untuk pendaftaran akun.');
+    if (matchedAccount.status === 'nonaktif') {
+      setErrorMsg(`Akun "${matchedAccount.satkerName}" saat ini non-aktif. Hubungi Admin Keuangan.`);
+      return;
     }
+    
+    // If password is set on the account, check it
+    if (matchedAccount.password && matchedAccount.password.trim() !== '') {
+      if (password !== matchedAccount.password) {
+        setErrorMsg(`Password salah untuk akun "${matchedAccount.satkerName}".`);
+        return;
+      }
+    }
+
+    setErrorMsg('');
+    const matchedRole: UserRole = matchedAccount.role || (
+      matchedAccount.username === 'admin' ? 'keuangan' :
+      matchedAccount.username === 'verifikator' ? 'verifikator' :
+      matchedAccount.username === 'auditor' ? 'auditor' : 'satker'
+    );
+
+    onLogin(matchedRole, matchedAccount.username, matchedAccount.satkerName);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
