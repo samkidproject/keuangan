@@ -62,12 +62,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       return;
     }
     
-    // If password is set on the account, check it
-    if (matchedAccount.password && matchedAccount.password.trim() !== '') {
-      if (password !== matchedAccount.password) {
-        setErrorMsg(`Password salah untuk akun "${matchedAccount.satkerName}".`);
-        return;
-      }
+    const trimmedPass = password.trim();
+    if (!trimmedPass) {
+      setErrorMsg(`Password wajib diisi untuk akun "${matchedAccount.satkerName}".`);
+      return;
+    }
+
+    // Strict password check against account password (or default '123456')
+    const expectedPassword = (matchedAccount.password && matchedAccount.password.trim() !== '') 
+      ? matchedAccount.password 
+      : '123456';
+
+    if (trimmedPass !== expectedPassword) {
+      setErrorMsg(`Password salah untuk akun "${matchedAccount.satkerName}".`);
+      return;
     }
 
     setErrorMsg('');
@@ -177,18 +185,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-800 flex items-center justify-between">
                 <span>Password / Kata Kunci</span>
-                <span className="text-[10px] text-slate-400 font-normal">(Opsional jika diisi admin)</span>
+                <span className="text-[10px] text-amber-700 font-bold">(Wajib diisi)</span>
               </label>
               <div className="relative">
                 <Lock className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                 <input
                   type="password"
+                  required
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
                     if (errorMsg) setErrorMsg('');
                   }}
-                  placeholder="Masukkan Password (jika ada)"
+                  placeholder="Masukkan Password Akun Anda"
                   className="w-full bg-slate-50/80 border border-slate-300 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 font-semibold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all shadow-xs"
                 />
               </div>
@@ -199,7 +208,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 </div>
               )}
               <p className="text-[10px] text-slate-500 font-medium pt-1">
-                *Satker Kejari menggunakan username akun yang telah didaftarkan.
+                ***
               </p>
             </div>
 
