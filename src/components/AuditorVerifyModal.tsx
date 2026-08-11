@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SubmissionItem, VerificationStatus, AuditChecklist, SatkerAccount } from '../types';
 import { formatWhatsAppLink, formatDisplayPhone } from '../lib/contactUtils';
+import { AttachmentUploader } from './AttachmentUploader';
 import { 
   X, 
   ShieldCheck, 
@@ -19,7 +20,8 @@ import {
   User,
   Users,
   Lock,
-  UserPlus
+  UserPlus,
+  AlertCircle
 } from 'lucide-react';
 
 export const AUDITOR_TEAM_MEMBERS = [
@@ -43,7 +45,11 @@ interface AuditorVerifyModalProps {
     recommendation: string,
     notes: string,
     auditorName: string,
-    approvedNominal?: number
+    approvedNominal?: number,
+    auditorNotaDinasNumber?: string,
+    auditorNotaDinasFileUrl?: string,
+    auditorNotaDinasFileName?: string,
+    auditorNotaDinasNotes?: string
   ) => void;
   onClaimSubmission?: (
     itemId: string,
@@ -83,6 +89,13 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
   const [auditorName, setAuditorName] = useState<string>(item.auditorName || item.assignedAuditor || 'Auditor Kejati');
   const [approvedNominalStr, setApprovedNominalStr] = useState<string>('');
 
+  // States for Auditor's Nota Dinas Hasil Pemeriksaan
+  const [auditorNdNumber, setAuditorNdNumber] = useState<string>(item.auditorNotaDinasNumber || '');
+  const [auditorNdFileUrl, setAuditorNdFileUrl] = useState<string>(item.auditorNotaDinasFileUrl || '');
+  const [auditorNdFileName, setAuditorNdFileName] = useState<string>(item.auditorNotaDinasFileName || '');
+  const [auditorNdNotes, setAuditorNdNotes] = useState<string>(item.auditorNotaDinasNotes || '');
+  const [errorMsg, setErrorMsg] = useState<string>('');
+
   useEffect(() => {
     if (item) {
       setStatus(item.status === 'belum_diperiksa' ? 'direkomendasikan' : item.status);
@@ -98,6 +111,12 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
       setAuditorName(item.auditorName || item.assignedAuditor || 'Auditor Kejati');
       const initVal = item.auditorApprovedNominal ?? item.nominal;
       setApprovedNominalStr(initVal ? new Intl.NumberFormat('id-ID').format(initVal) : '');
+      
+      setAuditorNdNumber(item.auditorNotaDinasNumber || '');
+      setAuditorNdFileUrl(item.auditorNotaDinasFileUrl || '');
+      setAuditorNdFileName(item.auditorNotaDinasFileName || '');
+      setAuditorNdNotes(item.auditorNotaDinasNotes || '');
+      setErrorMsg('');
     }
   }, [item]);
 
@@ -122,8 +141,34 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg('');
+
+    // Validation: Require Auditor's Nota Dinas if status is direkomendasikan (going to Keuangan)
+    if (status === 'direkomendasikan') {
+      if (!auditorNdNumber.trim()) {
+        setErrorMsg('Wajib mengisi Nomor Nota Dinas Hasil Pemeriksaan Auditor sebagai bukti selesai diperiksa!');
+        return;
+      }
+      if (!auditorNdFileUrl.trim()) {
+        setErrorMsg('Wajib mengunggah/melampirkan dokumen PDF/Link Nota Dinas Hasil Pemeriksaan Auditor!');
+        return;
+      }
+    }
+
     const parsedNominal = parseFloat(approvedNominalStr.replace(/\./g, '')) || item.nominal || 0;
-    onSaveVerification(item.id, status, checklist, recommendation, notes, auditorName, parsedNominal);
+    onSaveVerification(
+      item.id, 
+      status, 
+      checklist, 
+      recommendation, 
+      notes, 
+      auditorName, 
+      parsedNominal,
+      auditorNdNumber.trim(),
+      auditorNdFileUrl.trim(),
+      auditorNdFileName.trim(),
+      auditorNdNotes.trim()
+    );
     onClose();
   };
 
@@ -499,6 +544,69 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* UPLOAD NOTA DINAS HASIL PEMERIKSAAN AUDITOR */}
+          <div className="bg-purple-50/90 border border-purple-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-purple-200 pb-2">
+              <div className="flex items-center gap-2 text-purple-950 font-black text-xs">
+                <FileText className="h-4 w-4 text-purple-700" />
+                <span>Nota Dinas Hasil Pemeriksaan Auditor (Bukti Selesai Diperiksa)</span>
+              </div>
+              <span className="text-[10px] font-extrabold bg-purple-200 text-purple-900 px-2 py-0.5 rounded border border-purple-300">
+                Wajib untuk Bagian Keuangan
+              </span>
+            </div>
+
+            <p className="text-[11px] text-purple-900 leading-relaxed font-medium">
+              Unggah Nota Dinas Hasil Pemeriksaan Auditor sebagai bukti fisik bahwa pengajuan telah selesai diperiksa dan direkomendasikan untuk dapat diproses di Bagian Keuangan.
+            </p>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-900 mb-1">
+                Nomor Nota Dinas Hasil Pemeriksaan Auditor <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={auditorNdNumber}
+                onChange={(e) => setAuditorNdNumber(e.target.value)}
+                placeholder="Contoh: ND-AUD/KEJATI/08/2026"
+                className="w-full bg-white border border-purple-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 font-extrabold focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+
+            <AttachmentUploader
+              fileUrl={auditorNdFileUrl}
+              fileName={auditorNdFileName}
+              onFileChange={(url, name) => {
+                setAuditorNdFileUrl(url);
+                if (name) setAuditorNdFileName(name);
+              }}
+              label="Lampiran Dokumen PDF / Link Nota Dinas Hasil Pemeriksaan Auditor"
+              required={status === 'direkomendasikan'}
+              accentColor="emerald"
+            />
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Catatan Ringkas Nota Dinas Auditor (Opsional):
+              </label>
+              <input
+                type="text"
+                value={auditorNdNotes}
+                onChange={(e) => setAuditorNdNotes(e.target.value)}
+                placeholder="Catatan pendukung pada Nota Dinas Auditor..."
+                className="w-full bg-white border border-purple-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+          </div>
+
+          {/* Validation Error Banner */}
+          {errorMsg && (
+            <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-center gap-2 text-xs font-bold text-rose-900 animate-fadeIn">
+              <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
           {/* Submit Action */}
           <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">

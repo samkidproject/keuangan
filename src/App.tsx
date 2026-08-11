@@ -354,7 +354,11 @@ export default function App() {
     recommendation: string,
     notes: string,
     auditorName: string,
-    approvedNominal?: number
+    approvedNominal?: number,
+    auditorNotaDinasNumber?: string,
+    auditorNotaDinasFileUrl?: string,
+    auditorNotaDinasFileName?: string,
+    auditorNotaDinasNotes?: string
   ) => {
     const now = getWIBTimestamp();
     const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
@@ -363,12 +367,14 @@ export default function App() {
     const finalNominal = approvedNominal ?? targetItem.auditorApprovedNominal ?? targetItem.nominal ?? 0;
     const finalAuditorName = auditorName.trim() || targetItem.assignedAuditor || 'Auditor Kejati';
 
+    const hasAuditorNd = Boolean(auditorNotaDinasNumber && auditorNotaDinasNumber.trim());
+
     const newLog = {
       id: `log-${Date.now()}`,
       timestamp: now,
       userRole: 'auditor' as UserRole,
       userName: finalAuditorName,
-      action: `Pemeriksaan Auditor: Status "${status.toUpperCase()}"`,
+      action: `Pemeriksaan Auditor: Status "${status.toUpperCase()}"${hasAuditorNd ? ` (ND Auditor: ${auditorNotaDinasNumber})` : ''}`,
       note: `Nominal Disetujui: Rp ${finalNominal.toLocaleString('id-ID')}${recommendation ? ` | Rekomendasi: ${recommendation}` : ''}`
     };
 
@@ -382,6 +388,11 @@ export default function App() {
       assignedAuditor: finalAuditorName,
       auditorLockStatus: 'completed',
       auditorApprovedNominal: finalNominal,
+      auditorNotaDinasNumber: auditorNotaDinasNumber || targetItem.auditorNotaDinasNumber,
+      auditorNotaDinasFileUrl: auditorNotaDinasFileUrl || targetItem.auditorNotaDinasFileUrl,
+      auditorNotaDinasFileName: auditorNotaDinasFileName || targetItem.auditorNotaDinasFileName,
+      auditorNotaDinasNotes: auditorNotaDinasNotes || targetItem.auditorNotaDinasNotes,
+      auditorNotaDinasCreatedAt: hasAuditorNd ? (targetItem.auditorNotaDinasCreatedAt || now) : targetItem.auditorNotaDinasCreatedAt,
       verifiedAt: now,
       history: [newLog, ...(targetItem.history || [])]
     };

@@ -283,7 +283,7 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
               </div>
             )}
 
-            {/* Existing Nota Dinas Card */}
+            {/* Existing Nota Dinas Verifikator Keuangan Card */}
             {item.notaDinasNumber && (
               <div className="pt-2 border-t border-amber-200 bg-amber-100/80 p-2.5 rounded-lg border border-amber-300">
                 <div className="flex items-center justify-between">
@@ -299,7 +299,7 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
                       className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-lg text-xs flex items-center gap-1 shrink-0"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
-                      <span>Lihat PDF Nota Dinas</span>
+                      <span>Lihat PDF ND Verifikator</span>
                     </a>
                   )}
                 </div>
@@ -308,6 +308,36 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
                 )}
               </div>
             )}
+
+            {/* Nota Dinas Hasil Pemeriksaan Auditor Card */}
+            {item.auditorNotaDinasNumber ? (
+              <div className="pt-2 border-t border-purple-200 bg-purple-50/90 p-2.5 rounded-lg border border-purple-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-black text-purple-900 uppercase tracking-wider block">Nota Dinas Hasil Pemeriksaan Auditor:</span>
+                    <span className="text-xs font-black text-purple-950">{item.auditorNotaDinasNumber}</span>
+                  </div>
+                  {item.auditorNotaDinasFileUrl && (
+                    <a
+                      href={item.auditorNotaDinasFileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-lg text-xs flex items-center gap-1 shrink-0 shadow-2xs"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      <span>Lihat PDF ND Auditor</span>
+                    </a>
+                  )}
+                </div>
+                {item.auditorNotaDinasNotes && (
+                  <p className="text-[11px] text-purple-900 italic mt-1 font-medium">"{item.auditorNotaDinasNotes}"</p>
+                )}
+              </div>
+            ) : item.status === 'direkomendasikan' ? (
+              <div className="pt-2 border-t border-purple-200 bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-amber-900 font-medium text-[11px] flex items-center gap-1.5">
+                <span>⚠️ Belum ada Nota Dinas Auditor yang diunggah.</span>
+              </div>
+            ) : null}
 
             {/* Existing SPP Info Card (if submitted) */}
             {item.sppNumber && (

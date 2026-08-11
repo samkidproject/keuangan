@@ -254,13 +254,13 @@ export const ColumnBoard: React.FC<ColumnBoardProps> = ({
                         )}
                       </div>
 
-                      {/* Nota Dinas Badge */}
+                      {/* Nota Dinas Verifikator Keuangan Badge */}
                       {item.notaDinasNumber && (
                         <div className="mt-2 bg-amber-950/60 rounded-lg p-2 border border-amber-800/80 flex items-center justify-between gap-1 text-[11px]">
                           <div className="flex items-center gap-1.5 truncate">
                             <FileSpreadsheet className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                             <span className="truncate text-amber-200 font-bold" title={item.notaDinasNumber}>
-                              ND: {item.notaDinasNumber}
+                              ND Keuangan: {item.notaDinasNumber}
                             </span>
                           </div>
                           {item.notaDinasFileUrl && (
@@ -269,7 +269,30 @@ export const ColumnBoard: React.FC<ColumnBoardProps> = ({
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-amber-400 hover:text-amber-300 p-0.5"
-                              title="Buka PDF Nota Dinas"
+                              title="Buka PDF Nota Dinas Verifikator"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Auditor Nota Dinas Badge */}
+                      {item.auditorNotaDinasNumber && (
+                        <div className="mt-2 bg-purple-950/60 rounded-lg p-2 border border-purple-800/80 flex items-center justify-between gap-1 text-[11px]">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <ShieldCheck className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+                            <span className="truncate text-purple-200 font-bold" title={item.auditorNotaDinasNumber}>
+                              ND Auditor: {item.auditorNotaDinasNumber}
+                            </span>
+                          </div>
+                          {item.auditorNotaDinasFileUrl && (
+                            <a
+                              href={item.auditorNotaDinasFileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-purple-400 hover:text-purple-300 p-0.5"
+                              title="Buka PDF Nota Dinas Auditor"
                             >
                               <ExternalLink className="h-3.5 w-3.5" />
                             </a>

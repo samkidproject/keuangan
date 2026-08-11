@@ -5,6 +5,7 @@ export const DEFAULT_SATKER_ACCOUNTS: SatkerAccount[] = [
     id: 'internal-admin',
     satkerName: 'Admin Keuangan Kejati',
     username: 'admin',
+    password: '123456',
     role: 'keuangan',
     status: 'aktif',
     createdAt: '2026-01-01T00:00:00.000Z'
@@ -13,6 +14,7 @@ export const DEFAULT_SATKER_ACCOUNTS: SatkerAccount[] = [
     id: 'internal-verifikator',
     satkerName: 'Verifikator Kejati',
     username: 'verifikator',
+    password: '123456',
     role: 'verifikator',
     status: 'aktif',
     createdAt: '2026-01-01T00:00:00.000Z'
@@ -21,6 +23,7 @@ export const DEFAULT_SATKER_ACCOUNTS: SatkerAccount[] = [
     id: 'internal-auditor',
     satkerName: 'Auditor Internal Kejati',
     username: 'auditor',
+    password: '123456',
     role: 'auditor',
     status: 'aktif',
     createdAt: '2026-01-01T00:00:00.000Z'

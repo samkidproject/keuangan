@@ -345,19 +345,32 @@ export const TableView: React.FC<TableViewProps> = ({
                           )}
                         </div>
 
-                        {/* Nota Dinas Badge */}
+                        {/* Nota Dinas Verifikator Keuangan Badge */}
                         {item.notaDinasNumber ? (
                           <div className="flex items-center gap-1 text-[10px] font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 w-fit">
-                            <FileSpreadsheet className="h-3 w-3 text-amber-700" />
-                            <span className="truncate max-w-[140px]" title={item.notaDinasNumber}>ND: {item.notaDinasNumber}</span>
+                            <FileSpreadsheet className="h-3 w-3 text-amber-700 shrink-0" />
+                            <span className="truncate max-w-[130px]" title={`ND Keuangan: ${item.notaDinasNumber}`}>ND Keuangan: {item.notaDinasNumber}</span>
                             {item.notaDinasFileUrl && (
-                              <a href={item.notaDinasFileUrl} target="_blank" rel="noopener noreferrer" className="text-amber-800 hover:underline">
+                              <a href={item.notaDinasFileUrl} target="_blank" rel="noopener noreferrer" className="text-amber-800 hover:underline shrink-0">
                                 <ExternalLink className="h-3 w-3" />
                               </a>
                             )}
                           </div>
                         ) : (
-                          <span className="text-[10px] text-slate-400 italic block">Nota Dinas belum diterbitkan</span>
+                          <span className="text-[10px] text-slate-400 italic block">ND Keuangan belum diterbitkan</span>
+                        )}
+
+                        {/* Auditor Nota Dinas Badge */}
+                        {item.auditorNotaDinasNumber && (
+                          <div className="flex items-center gap-1 text-[10px] font-black text-purple-900 bg-purple-100 px-2 py-0.5 rounded border border-purple-300 w-fit">
+                            <ShieldCheck className="h-3 w-3 text-purple-700 shrink-0" />
+                            <span className="truncate max-w-[130px]" title={`ND Auditor: ${item.auditorNotaDinasNumber}`}>ND Auditor: {item.auditorNotaDinasNumber}</span>
+                            {item.auditorNotaDinasFileUrl && (
+                              <a href={item.auditorNotaDinasFileUrl} target="_blank" rel="noopener noreferrer" className="text-purple-800 hover:underline shrink-0">
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
                         )}
                       </td>
 

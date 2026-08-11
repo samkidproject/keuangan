@@ -70,6 +70,13 @@ export interface SubmissionItem {
   auditorApprovedNominal?: number;
   verifiedAt?: string;
 
+  // Auditor Nota Dinas Hasil Pemeriksaan fields (Uploaded by Auditor upon completing audit)
+  auditorNotaDinasNumber?: string;
+  auditorNotaDinasFileUrl?: string;
+  auditorNotaDinasFileName?: string;
+  auditorNotaDinasCreatedAt?: string;
+  auditorNotaDinasNotes?: string;
+
   // Final Finance Approval fields
   financeStatus?: string;
   financeNotes?: string;
