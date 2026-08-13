@@ -364,7 +364,9 @@ export default function App() {
     const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
     if (!targetItem) return;
 
-    const finalNominal = approvedNominal ?? targetItem.auditorApprovedNominal ?? targetItem.nominal ?? 0;
+    const finalNominal = (approvedNominal !== undefined && approvedNominal !== null && !isNaN(approvedNominal))
+      ? approvedNominal
+      : (targetItem.auditorApprovedNominal ?? targetItem.nominal ?? 0);
     const finalAuditorName = auditorName.trim() || targetItem.assignedAuditor || 'Auditor Kejati';
 
     const hasAuditorNd = Boolean(auditorNotaDinasNumber && auditorNotaDinasNumber.trim());

@@ -137,8 +137,13 @@ export const SatkerSppModal: React.FC<SatkerSppModalProps> = ({
             <div className="text-slate-800 font-bold text-xs">
               Uraian: <span className="text-amber-950 font-extrabold">{item.jenisPengajuan || 'Permohonan Anggaran BA BUN'}</span>
             </div>
-            <div className="text-slate-600 font-medium text-[11px] flex items-center justify-between">
-              <span>Nominal: <strong className="text-emerald-700 font-extrabold">{formatCurrency(item.nominal)}</strong></span>
+            <div className="text-slate-600 font-medium text-[11px] flex flex-wrap items-center justify-between gap-1">
+              <span>Nominal Permohonan: <strong className="text-emerald-700 font-extrabold">{formatCurrency(item.nominal)}</strong></span>
+              {item.auditorApprovedNominal !== undefined && item.auditorApprovedNominal !== null && (
+                <span className="bg-purple-100 text-purple-950 border border-purple-300 px-2 py-0.5 rounded-md font-black">
+                  Disetujui Auditor: {formatCurrency(item.auditorApprovedNominal)}
+                </span>
+              )}
               <span>Nota Dinas: <strong className="text-slate-800">{item.notaDinasNumber || 'Ada'}</strong></span>
             </div>
           </div>

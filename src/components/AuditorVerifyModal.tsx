@@ -109,8 +109,10 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
       setRecommendation(item.auditorRecommendation || '');
       setNotes(item.auditorNotes || '');
       setAuditorName(item.auditorName || item.assignedAuditor || 'Auditor Kejati');
-      const initVal = item.auditorApprovedNominal ?? item.nominal;
-      setApprovedNominalStr(initVal ? new Intl.NumberFormat('id-ID').format(initVal) : '');
+      const initVal = (item.auditorApprovedNominal !== undefined && item.auditorApprovedNominal !== null)
+        ? item.auditorApprovedNominal
+        : item.nominal;
+      setApprovedNominalStr(initVal !== undefined && initVal !== null ? new Intl.NumberFormat('id-ID').format(initVal) : '');
       
       setAuditorNdNumber(item.auditorNotaDinasNumber || '');
       setAuditorNdFileUrl(item.auditorNotaDinasFileUrl || '');
@@ -155,7 +157,10 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
       }
     }
 
-    const parsedNominal = parseFloat(approvedNominalStr.replace(/\./g, '')) || item.nominal || 0;
+    const rawNum = approvedNominalStr.replace(/\./g, '').replace(/,/g, '').trim();
+    const parsedNominal = (rawNum !== '' && !isNaN(Number(rawNum))) 
+      ? Number(rawNum) 
+      : (item.auditorApprovedNominal ?? item.nominal ?? 0);
     onSaveVerification(
       item.id, 
       status, 

@@ -263,7 +263,13 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
               </div>
               <div>
                 <span className="text-[11px] font-bold text-slate-500 block">Total Nilai Anggaran:</span>
-                <span className="font-black text-emerald-700 text-sm">{formatCurrency(item.nominal)}</span>
+                <span className="font-black text-emerald-700 text-sm block">{formatCurrency(item.nominal)}</span>
+                {item.auditorApprovedNominal !== undefined && item.auditorApprovedNominal !== null && (
+                  <div className="text-[11px] font-black text-purple-950 bg-purple-100 border border-purple-300 px-2 py-0.5 rounded-md mt-1 w-fit flex items-center gap-1 shadow-2xs" title="Nominal Rekomendasi Disetujui Auditor">
+                    <ShieldCheck className="h-3.5 w-3.5 text-purple-700 shrink-0" />
+                    <span>Disetujui Auditor: {formatCurrency(item.auditorApprovedNominal)}</span>
+                  </div>
+                )}
               </div>
             </div>
 

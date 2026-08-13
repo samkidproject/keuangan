@@ -37,7 +37,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ items, currentRole }) =>
   const totalNominal = items.reduce((acc, curr) => acc + (curr.nominal || 0), 0);
   const nominalAudited = items
     .filter(i => i.status === 'direkomendasikan' || i.status === 'selesai_keuangan')
-    .reduce((acc, curr) => acc + (curr.nominal || 0), 0);
+    .reduce((acc, curr) => acc + (curr.auditorApprovedNominal ?? curr.nominal ?? 0), 0);
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('id-ID', {

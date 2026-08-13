@@ -292,9 +292,10 @@ export const TableView: React.FC<TableViewProps> = ({
                               Nominal: {formatCurrency(item.nominal)}
                             </div>
 
-                            {item.auditorApprovedNominal && (
-                              <div className="text-[10px] text-emerald-950 font-black bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded w-fit mt-0.5" title="Nominal Direkomendasikan Auditor">
-                                Disetujui Auditor: {formatCurrency(item.auditorApprovedNominal)}
+                            {item.auditorApprovedNominal !== undefined && item.auditorApprovedNominal !== null && (
+                              <div className="text-[10px] text-purple-950 font-black bg-purple-100 border border-purple-300 px-1.5 py-0.5 rounded w-fit mt-0.5 flex items-center gap-1 shadow-2xs" title="Nominal Direkomendasikan Auditor">
+                                <ShieldCheck className="h-3 w-3 text-purple-700 shrink-0" />
+                                <span>Disetujui Auditor: {formatCurrency(item.auditorApprovedNominal)}</span>
                               </div>
                             )}
 

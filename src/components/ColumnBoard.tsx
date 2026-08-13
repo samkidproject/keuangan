@@ -214,10 +214,13 @@ export const ColumnBoard: React.FC<ColumnBoardProps> = ({
                           <span className="text-[10px] text-slate-400 font-medium">Nilai Anggaran:</span>
                           <span className="text-amber-400 font-extrabold">{formatCurrency(item.nominal)}</span>
                         </div>
-                        {item.auditorApprovedNominal && (
-                          <div className="flex items-center justify-between text-[11px] text-emerald-400 font-bold pt-0.5 bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-500/30">
-                            <span className="text-[10px] text-emerald-300 font-medium">Disetujui Auditor:</span>
-                            <span className="text-emerald-300 font-black">{formatCurrency(item.auditorApprovedNominal)}</span>
+                        {item.auditorApprovedNominal !== undefined && item.auditorApprovedNominal !== null && (
+                          <div className="flex items-center justify-between text-[11px] text-purple-300 font-bold pt-0.5 bg-purple-950/60 px-2 py-0.5 rounded-md border border-purple-500/40 shadow-2xs">
+                            <span className="text-[10px] text-purple-300 font-medium flex items-center gap-1">
+                              <ShieldCheck className="h-3 w-3 text-purple-400 shrink-0" />
+                              Disetujui Auditor:
+                            </span>
+                            <span className="text-purple-200 font-black">{formatCurrency(item.auditorApprovedNominal)}</span>
                           </div>
                         )}
                         {item.assignedAuditor ? (
