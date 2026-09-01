@@ -27,6 +27,7 @@ import { ReviseSubmissionModal } from './components/ReviseSubmissionModal';
 import { EditSubmissionModal } from './components/EditSubmissionModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { SamkidPromoModal } from './components/SamkidPromoModal';
+import { RealisasiDashboard } from './components/RealisasiDashboard';
 import { getWIBTimestamp } from './lib/dateUtils';
 
 import { DEFAULT_SATKER_ACCOUNTS } from './data/defaultSatkers';
@@ -800,12 +801,31 @@ service cloud.firestore {
           </div>
         )}
 
-        {/* Metric KPI Overview */}
+        {/* Metric KPI Overview (Shown on Table and Column views) */}
+        {filters.viewMode !== 'realisasi' && (
+          <StatsCards items={visibleSubmissions} currentRole={currentRole} />
+        )}
 
-        <StatsCards items={visibleSubmissions} currentRole={currentRole} />
-
-        {/* View Display (Column Board or Table View) */}
-        {filters.viewMode === 'column' ? (
+        {/* View Display (Realisasi Dashboard, Column Board, or Table View) */}
+        {filters.viewMode === 'realisasi' ? (
+          <RealisasiDashboard
+            submissions={submissions}
+            currentRole={currentRole}
+            currentUserSatker={satkerName}
+            onOpenSppModal={(item) => setSppModalItem(item)}
+            onViewDetail={(item) => {
+              if (currentRole === 'auditor') {
+                setAuditorModalItem(item);
+              } else if (currentRole === 'keuangan' || currentRole === 'verifikator') {
+                setFinanceModalItem(item);
+              } else if (currentRole === 'satker') {
+                setSppModalItem(item);
+              } else {
+                setFinanceModalItem(item);
+              }
+            }}
+          />
+        ) : filters.viewMode === 'column' ? (
           <ColumnBoard
             items={visibleSubmissions}
             currentRole={currentRole}
@@ -889,6 +909,7 @@ service cloud.firestore {
         isOpen={!!sppModalItem}
         onClose={() => setSppModalItem(null)}
         onSaveSpp={handleSaveSppData}
+        onSaveSppData={handleSaveSppData}
       />
 
       {/* Satker Resubmit Revision Modal */}

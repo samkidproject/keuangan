@@ -16,7 +16,8 @@ import {
   Trash2,
   Pencil,
   FileCheck,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Trophy
 } from 'lucide-react';
 
 interface TableViewProps {
@@ -179,6 +180,17 @@ export const TableView: React.FC<TableViewProps> = ({
               className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-900 font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-2xs"
             />
           </div>
+
+          {/* Quick Realisasi Dashboard Button */}
+          <button
+            type="button"
+            onClick={() => onFilterChange({ viewMode: 'realisasi' })}
+            className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black rounded-xl text-xs shadow-xs border border-amber-300 transition-all flex items-center gap-2 cursor-pointer shrink-0"
+            title="Lihat Peringkat & Realisasi SPP Semua Satker"
+          >
+            <Trophy className="h-4 w-4 text-amber-900" />
+            <span>Dashboard Realisasi SPP 🏆</span>
+          </button>
 
         </div>
 

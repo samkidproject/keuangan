@@ -100,5 +100,5 @@ export interface FilterState {
   satker: string;
   bidang: string;
   status: string;
-  viewMode: 'column' | 'table';
+  viewMode: 'column' | 'table' | 'realisasi';
 }

@@ -4,7 +4,11 @@ import {
   LogOut,
   UserCheck,
   Users,
-  FilePlus2
+  FilePlus2,
+  Table,
+  Columns3,
+  Trophy,
+  Sparkles
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -102,7 +106,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 type="button"
                 onClick={onOpenAddModal}
-                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-2xs transition-all flex items-center gap-1.5 transform active:scale-95"
+                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-2xs transition-all flex items-center gap-1.5 transform active:scale-95 cursor-pointer"
               >
                 <FilePlus2 className="h-4 w-4" />
                 <span>+ Entry Permohonan Baru</span>
@@ -114,7 +118,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 type="button"
                 onClick={onOpenSatkerModal}
-                className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5"
+                className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                 title="Kelola Akun Login Satker Kejaksaan Negeri"
               >
                 <Users className="h-4 w-4 text-amber-700" />
@@ -139,7 +143,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={onLogout}
-              className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl border border-rose-200 text-xs font-bold transition-all flex items-center gap-1"
+              className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl border border-rose-200 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
               title="Keluar dari Portal"
             >
               <LogOut className="h-4 w-4" />
@@ -150,11 +154,74 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         </div>
 
+        {/* View Navigation Menu Tabs (Tabel, Kanban, Realisasi SPP) */}
+        <div className="flex items-center justify-between gap-3 pt-3 mt-3 border-t border-amber-100 flex-wrap">
+          <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/90">
+            {/* Tab 1: Tabel */}
+            <button
+              type="button"
+              onClick={() => onFilterChange({ viewMode: 'table' })}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                filters.viewMode === 'table'
+                  ? 'bg-white text-slate-950 shadow-xs border border-slate-200 font-black'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <Table className="h-3.5 w-3.5 text-amber-600" />
+              <span>Daftar Pengajuan</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-700 font-extrabold border border-slate-200">
+                {totalItems}
+              </span>
+            </button>
 
+            {/* Tab 2: Kanban Board */}
+            <button
+              type="button"
+              onClick={() => onFilterChange({ viewMode: 'column' })}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                filters.viewMode === 'column'
+                  ? 'bg-white text-slate-950 shadow-xs border border-slate-200 font-black'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <Columns3 className="h-3.5 w-3.5 text-blue-600" />
+              <span>Papan Alur (Board)</span>
+            </button>
+
+            {/* Tab 3: Realisasi SPP Dashboard */}
+            <button
+              type="button"
+              onClick={() => onFilterChange({ viewMode: 'realisasi' })}
+              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                filters.viewMode === 'realisasi'
+                  ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 shadow-xs font-black border border-amber-400'
+                  : 'text-slate-700 hover:text-amber-950 hover:bg-amber-100/60'
+              }`}
+            >
+              <Trophy className="h-3.5 w-3.5 text-amber-700" />
+              <span>Dashboard Realisasi SPP</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-200 text-amber-950 font-black uppercase tracking-wider border border-amber-300">
+                Semua Satker 🏆
+              </span>
+            </button>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-slate-500">
+            <span>Mode Tampilan:</span>
+            <span className="font-extrabold text-amber-950">
+              {filters.viewMode === 'realisasi'
+                ? '🏆 Realisasi SPP Semua Satker'
+                : filters.viewMode === 'column'
+                ? '📊 Board Alur Kerja'
+                : '📋 Tabel Pengajuan'}
+            </span>
+          </div>
+        </div>
 
       </div>
     </header>
   );
 };
+
 
 

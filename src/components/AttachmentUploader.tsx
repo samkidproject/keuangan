@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Upload, Link as LinkIcon, FileText, Check, Trash2, FileCheck, ExternalLink, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Upload, Link as LinkIcon, FileText, Check, Trash2, FileCheck, ExternalLink, AlertCircle, Loader2 } from 'lucide-react';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../lib/firebase';
 
@@ -20,14 +20,45 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
   required = true,
   accentColor = 'amber'
 }) => {
-  const [mode, setMode] = useState<'upload' | 'link'>(
-    fileUrl && (fileUrl.startsWith('data:') || fileUrl.includes('firebasestorage')) ? 'upload' : 'link'
+  const isUploadedUrl = Boolean(
+    fileUrl && (
+      fileUrl.startsWith('data:') || 
+      fileUrl.startsWith('blob:') || 
+      fileUrl.includes('firebasestorage') || 
+      fileUrl.includes('http://') || 
+      fileUrl.includes('https://')
+    )
   );
-  const [linkInput, setLinkInput] = useState<string>(fileUrl && (fileUrl.startsWith('data:') || fileUrl.includes('firebasestorage')) ? '' : fileUrl);
-  const [nameInput, setNameInput] = useState<string>(fileName);
+
+  const isDriveLink = Boolean(
+    fileUrl && (
+      fileUrl.includes('drive.google.com') || 
+      fileUrl.includes('dropbox.com') || 
+      fileUrl.includes('onedrive.live.com')
+    )
+  );
+
+  const [mode, setMode] = useState<'upload' | 'link'>(isDriveLink ? 'link' : 'upload');
+  const [linkInput, setLinkInput] = useState<string>(isDriveLink ? fileUrl : '');
+  const [nameInput, setNameInput] = useState<string>(fileName || '');
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [fileSizeStr, setFileSizeStr] = useState<string>('');
   const [uploadError, setUploadError] = useState<string>('');
+
+  useEffect(() => {
+    setNameInput(fileName || '');
+    if (fileUrl) {
+      if (fileUrl.includes('drive.google.com') || fileUrl.includes('dropbox.com')) {
+        setMode('link');
+        setLinkInput(fileUrl);
+      } else {
+        setLinkInput(fileUrl);
+      }
+    } else {
+      setLinkInput('');
+      setFileSizeStr('');
+    }
+  }, [fileUrl, fileName]);
 
   const colorClasses = {
     amber: {
@@ -68,9 +99,9 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check file size (limit 30MB)
+    // Limit check (30MB)
     if (file.size > 30 * 1024 * 1024) {
-      setUploadError('Ukuran file melebihi batas 30 MB. Untuk file yang banyak/besar, silakan kompres menjadi file ZIP/RAR atau gunakan tab "Tulis Link URL" Google Drive.');
+      setUploadError('Ukuran file melebihi batas 30 MB. Untuk berkas besar silakan gunakan tab "Tulis Link URL" Google Drive atau kompres menjadi .ZIP/.RAR.');
       return;
     }
 
@@ -82,7 +113,10 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
       : `${(file.size / 1024).toFixed(1)} KB`;
     setFileSizeStr(sizeFormatted);
 
-    // 1. Upload to Firebase Storage (Blaze Plan supported up to 30MB)
+    const uploadedName = file.name;
+    setNameInput(uploadedName);
+
+    // 1. Try Firebase Storage
     try {
       const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
       const storagePath = `attachments/${Date.now()}_${cleanFileName}`;
@@ -91,39 +125,39 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
       const snapshot = await uploadBytes(fileRef, file);
       const downloadUrl = await getDownloadURL(snapshot.ref);
 
-      const uploadedName = file.name;
-      setNameInput(uploadedName);
       onFileChange(downloadUrl, uploadedName);
       setIsUploading(false);
       return;
     } catch (storageErr: any) {
-      console.error("Firebase Storage upload error:", storageErr);
-      const errMsg = storageErr?.message || 'Gagal mengunggah ke Firebase Storage';
-      
-      // Fallback to base64 if file is small (< 700KB)
-      if (file.size <= 700 * 1024) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const dataUrl = event.target?.result as string;
-          const uploadedName = file.name;
-          setNameInput(uploadedName);
-          onFileChange(dataUrl, uploadedName);
-          setIsUploading(false);
-        };
-        reader.onerror = () => {
-          setUploadError('Gagal membaca file.');
-          setIsUploading(false);
-        };
-        reader.readAsDataURL(file);
-        return;
-      }
+      console.warn("Firebase Storage upload fallback to local data/blob URL:", storageErr);
 
-      setUploadError(`Gagal mengunggah ke Firebase Storage: ${errMsg}. Pastikan Firebase Storage Rules di Console Firebase 'ba-bun' mengizinkan Akses Baca/Tulis (allow read, write: if true;) atau gunakan tab 'Tulis Link URL'.`);
-      setIsUploading(false);
-      return;
+      // 2. Reliable Fallback via FileReader (DataURL / Base64) or Blob
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        if (dataUrl) {
+          onFileChange(dataUrl, uploadedName);
+        } else {
+          const blobUrl = URL.createObjectURL(file);
+          onFileChange(blobUrl, uploadedName);
+        }
+        setIsUploading(false);
+      };
+      reader.onerror = () => {
+        const blobUrl = URL.createObjectURL(file);
+        onFileChange(blobUrl, uploadedName);
+        setIsUploading(false);
+      };
+      
+      try {
+        reader.readAsDataURL(file);
+      } catch (err) {
+        const blobUrl = URL.createObjectURL(file);
+        onFileChange(blobUrl, uploadedName);
+        setIsUploading(false);
+      }
     }
   };
-
 
   const handleLinkChange = (newLink: string) => {
     setLinkInput(newLink);
@@ -143,6 +177,8 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
     onFileChange('', '');
   };
 
+  const hasValidFile = Boolean(fileUrl && fileUrl.trim() !== '');
+
   return (
     <div className="space-y-2.5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -158,7 +194,7 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
               setMode('upload');
               setUploadError('');
             }}
-            className={`px-3 py-1 rounded-lg text-[11px] transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1 rounded-lg text-[11px] transition-all flex items-center gap-1.5 cursor-pointer ${
               mode === 'upload' ? colorClasses.activeTab : 'text-slate-600 hover:text-slate-900 font-semibold'
             }`}
           >
@@ -171,7 +207,7 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
               setMode('link');
               setUploadError('');
             }}
-            className={`px-3 py-1 rounded-lg text-[11px] transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1 rounded-lg text-[11px] transition-all flex items-center gap-1.5 cursor-pointer ${
               mode === 'link' ? colorClasses.activeTab : 'text-slate-600 hover:text-slate-900 font-semibold'
             }`}
           >
@@ -192,19 +228,19 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
       {/* Upload File Mode */}
       {mode === 'upload' ? (
         <div className="space-y-2">
-          {fileUrl && (fileUrl.startsWith('data:') || fileUrl.includes('firebasestorage') || fileUrl.includes('https://')) ? (
+          {hasValidFile ? (
             <div className={`p-3 rounded-xl border ${colorClasses.border} ${colorClasses.bgLight} flex items-center justify-between gap-3 shadow-2xs`}>
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className={`p-2 rounded-lg ${colorClasses.button} shrink-0`}>
                   <FileCheck className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="font-extrabold text-xs text-slate-900 truncate">
+                  <div className="font-extrabold text-xs text-slate-900 truncate" title={nameInput || fileName || 'Dokumen_Terunggah.pdf'}>
                     {nameInput || fileName || 'Dokumen_Terunggah.pdf'}
                   </div>
                   <div className="text-[10px] text-slate-500 font-bold flex items-center gap-2 mt-0.5">
                     <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-900 rounded font-black border border-emerald-300">
-                      Tersimpan di Firebase
+                      Dokumen Terlampir & Siap
                     </span>
                     {fileSizeStr && <span>{fileSizeStr}</span>}
                   </div>
@@ -216,8 +252,8 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
                   href={fileUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  download={nameInput || 'Dokumen.pdf'}
-                  className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1"
+                  download={nameInput || fileName || 'Dokumen.pdf'}
+                  className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   <span>Pratinjau</span>
@@ -225,7 +261,7 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
                 <button
                   type="button"
                   onClick={handleClearFile}
-                  className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition-colors"
+                  className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                   title="Ganti / Hapus File"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -234,27 +270,32 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
             </div>
           ) : (
             <div className="space-y-1.5">
-              <label className={`border-2 border-dashed ${colorClasses.border} ${colorClasses.bgLight} hover:bg-slate-100/80 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all group`}>
+              <label className={`border-2 border-dashed ${colorClasses.border} ${colorClasses.bgLight} hover:bg-slate-100/80 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all group relative`}>
                 <div className={`p-2.5 rounded-full ${colorClasses.bgLight} border ${colorClasses.border} group-hover:scale-110 transition-transform mb-1.5`}>
-                  <Upload className={`h-6 w-6 ${colorClasses.text}`} />
+                  {isUploading ? (
+                    <Loader2 className={`h-6 w-6 animate-spin ${colorClasses.text}`} />
+                  ) : (
+                    <Upload className={`h-6 w-6 ${colorClasses.text}`} />
+                  )}
                 </div>
                 <span className={`text-xs font-black ${colorClasses.text}`}>
                   {isUploading ? 'Membaca & Memproses File...' : 'Klik untuk Pilih File (PDF / Word / ZIP / RAR / Gambar)'}
                 </span>
                 <span className="text-[10px] text-slate-600 font-bold mt-0.5">
-                  Maksimal Ukuran File: 30 MB (Tersimpan di Firebase)
+                  Maksimal Ukuran File: 30 MB (PDF, Word, Excel, Gambar, ZIP, RAR)
                 </span>
                 <input
                   type="file"
-                  accept=".pdf,.doc,.docx,.zip,.rar,.jpg,.jpeg,.png,application/pdf,application/zip,application/x-zip-compressed,application/x-rar-compressed,application/vnd.rar"
+                  disabled={isUploading}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.rar,.jpg,.jpeg,.png,application/pdf,application/zip,application/x-zip-compressed,application/x-rar-compressed,application/vnd.rar"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
               </label>
 
               <div className="p-2 bg-slate-100/80 rounded-xl border border-slate-200 text-[10px] text-slate-600 font-medium flex items-center gap-1.5">
-                <span className="font-bold shrink-0 text-slate-800">💡 Info Lampiran Banyak:</span>
-                <span>Untuk pengajuan yang memiliki banyak file/dokumen, disarankan disatukan dan dikompres ke dalam bentuk <strong className="text-slate-900 font-black">.ZIP</strong> atau <strong className="text-slate-900 font-black">.RAR</strong> (Maks. 30 MB).</span>
+                <span className="font-bold shrink-0 text-slate-800">💡 Info Lampiran:</span>
+                <span>File SPP / bukti permohonan dapat langsung diunggah format PDF atau jika banyak berkas dikompres menjadi <strong className="text-slate-900 font-black">.ZIP</strong>.</span>
               </div>
             </div>
           )}
@@ -279,7 +320,7 @@ export const AttachmentUploader: React.FC<AttachmentUploaderProps> = ({
               type="text"
               value={nameInput}
               onChange={(e) => handleNameChange(e.target.value)}
-              placeholder="Nama Berkas Dokumen (Contoh: Dokumen_Permohonan_B520.pdf)"
+              placeholder="Nama Berkas Dokumen (Contoh: Dokumen_SPP_00123.pdf)"
               className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
           </div>

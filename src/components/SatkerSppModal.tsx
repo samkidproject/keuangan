@@ -1,36 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { SubmissionItem } from '../types';
-import { X, FileCheck, Upload, Link, Building2, CheckCircle2, FileText, ExternalLink } from 'lucide-react';
-import { getWIBTimestamp } from '../lib/dateUtils';
+import { X, FileCheck, Building2, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { AttachmentUploader } from './AttachmentUploader';
 
 interface SatkerSppModalProps {
   item: SubmissionItem | null;
   isOpen: boolean;
   onClose: () => void;
-  onSaveSppData: (
+  onSaveSpp?: (
     itemId: string,
     sppNumber: string,
     sppFileUrl: string,
     sppFileName: string,
     sppNotes: string
-  ) => void;
+  ) => Promise<void> | void;
+  onSaveSppData?: (
+    itemId: string,
+    sppNumber: string,
+    sppFileUrl: string,
+    sppFileName: string,
+    sppNotes: string
+  ) => Promise<void> | void;
 }
 
 export const SatkerSppModal: React.FC<SatkerSppModalProps> = ({
   item,
   isOpen,
   onClose,
+  onSaveSpp,
   onSaveSppData,
 }) => {
   if (!isOpen || !item) return null;
 
   const [sppNumber, setSppNumber] = useState<string>(item.sppNumber || '');
-  const [uploadType, setUploadType] = useState<'link' | 'file'>('link');
   const [sppFileUrl, setSppFileUrl] = useState<string>(item.sppFileUrl || '');
   const [sppFileName, setSppFileName] = useState<string>(item.sppFileName || '');
   const [sppNotes, setSppNotes] = useState<string>(item.sppNotes || '');
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
     if (item) {
@@ -39,37 +46,45 @@ export const SatkerSppModal: React.FC<SatkerSppModalProps> = ({
       setSppFileName(item.sppFileName || '');
       setSppNotes(item.sppNotes || '');
       setErrorMsg('');
+      setIsSubmitting(false);
     }
   }, [item]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 15 * 1024 * 1024) {
-        setErrorMsg('Ukuran file maksimal 15MB');
-        return;
-      }
-      setErrorMsg('');
-      setSppFileName(file.name);
-      const fakeUrl = URL.createObjectURL(file);
-      setSppFileUrl(fakeUrl);
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sppNumber.trim()) {
+    setErrorMsg('');
+
+    const trimmedSppNumber = sppNumber.trim();
+    const trimmedFileUrl = sppFileUrl.trim();
+
+    if (!trimmedSppNumber) {
       setErrorMsg('Nomor SPP wajib diisi.');
       return;
     }
-    if (!sppFileUrl.trim()) {
-      setErrorMsg('File atau Link Dokumen SPP wajib diisi/diunggah.');
+    if (!trimmedFileUrl) {
+      setErrorMsg('Dokumen / Berkas SPP wajib diunggah atau diisikan tautan linknya.');
       return;
     }
 
-    const finalFileName = sppFileName.trim() || `Berkas_SPP_${sppNumber.replace(/[^a-zA-Z0-0]/g, '_')}.pdf`;
-    onSaveSppData(item.id, sppNumber.trim(), sppFileUrl.trim(), finalFileName, sppNotes.trim());
-    onClose();
+    const finalFileName = sppFileName.trim() || `Berkas_SPP_${trimmedSppNumber.replace(/[^a-zA-Z0-9.-]/g, '_')}.pdf`;
+    const saveFn = onSaveSpp || onSaveSppData;
+
+    if (!saveFn) {
+      setErrorMsg('Handler penyimpanan SPP belum tersedia.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const targetId = item.id || item.submissionId;
+      await Promise.resolve(saveFn(targetId, trimmedSppNumber, trimmedFileUrl, finalFileName, sppNotes.trim()));
+      onClose();
+    } catch (err: any) {
+      console.error("Error saving SPP data:", err);
+      setErrorMsg(err?.message || 'Terjadi kesalahan saat menyimpan data SPP. Silakan coba lagi.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const formatCurrency = (val?: number) => {
@@ -193,17 +208,28 @@ export const SatkerSppModal: React.FC<SatkerSppModalProps> = ({
           <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={onClose}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5"
+              disabled={isSubmitting}
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs shadow-md transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
             >
-              <CheckCircle2 className="h-4 w-4" />
-              <span>Simpan Dokumen SPP</span>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-white" />
+                  <span>Menyimpan Dokumen SPP...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Simpan Dokumen SPP</span>
+                </>
+              )}
             </button>
           </div>
 
