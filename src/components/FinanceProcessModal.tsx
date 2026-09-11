@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SubmissionItem, UserRole, VerificationStatus, SatkerAccount } from '../types';
 import { formatWhatsAppLink, formatDisplayPhone } from '../lib/contactUtils';
 import { AttachmentUploader } from './AttachmentUploader';
+import { openAttachmentFile } from '../lib/firestoreService';
 import { 
   X, 
   Wallet, 
@@ -21,7 +22,9 @@ import {
   FileSpreadsheet,
   Link,
   Upload,
-  ArrowRight
+  ArrowRight,
+  Sparkles,
+  FileCheck
 } from 'lucide-react';
 
 interface FinanceProcessModalProps {
@@ -137,8 +140,9 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
     }
 
     const finalFileName = notaDinasFileName.trim() || `Nota_Dinas_${notaDinasNumber.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+    const targetId = item.id || item.submissionId;
     onSaveNotaDinas(
-      item.id,
+      targetId,
       notaDinasNumber.trim(),
       notaDinasFileUrl.trim(),
       finalFileName,
@@ -149,7 +153,8 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
 
   const handleFinalApproval = (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveFinanceProcess(item.id, 'selesai_keuangan', financeStatus, financeNotes);
+    const targetId = item.id || item.submissionId;
+    onSaveFinanceProcess(targetId, 'selesai_keuangan', financeStatus, financeNotes);
     onClose();
   };
 
@@ -239,6 +244,138 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
               ⚠️ {errorMsg}
             </div>
           )}
+
+          {/* Visual Workflow Stepper Indicator */}
+          {(() => {
+            const hasNd = Boolean(
+              (item.notaDinasNumber && item.notaDinasNumber.trim()) ||
+              (item.notaDinasFileUrl && item.notaDinasFileUrl.trim())
+            );
+            const isAuditorDone = item.status === 'direkomendasikan' || item.status === 'selesai_keuangan';
+            const isFinanceDone = item.status === 'selesai_keuangan';
+            const isSppDone = Boolean(item.sppNumber && item.sppNumber.trim());
+
+            return (
+              <div className="bg-white rounded-xl p-3.5 border border-amber-200 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-black text-slate-800">
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+                    Indikator Tahapan Proses Pengajuan:
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                    isSppDone 
+                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                      : isFinanceDone
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : isAuditorDone
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : hasNd
+                      ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                      : 'bg-amber-100 text-amber-900 border border-amber-300'
+                  }`}>
+                    {isSppDone 
+                      ? 'Tahap 4: SPP Terbit'
+                      : isFinanceDone
+                      ? 'Tahap 4: Menunggu Input SPP Satker'
+                      : isAuditorDone
+                      ? 'Tahap 3: Persetujuan Akhir Keuangan'
+                      : hasNd
+                      ? 'Tahap 2: Verifikasi Auditor'
+                      : 'Tahap 1: Verifikasi Keuangan Awal'}
+                  </span>
+                </div>
+
+                {/* 4 Steps Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  {/* Step 1 */}
+                  <div className={`p-2 rounded-lg border text-center transition-all ${
+                    hasNd 
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900' 
+                      : 'bg-amber-50 border-amber-300 text-amber-950 ring-1 ring-amber-400'
+                  }`}>
+                    <div className="flex items-center justify-center gap-1 text-[10px] font-black">
+                      {hasNd ? <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" /> : <Clock className="h-3 w-3 text-amber-600 animate-spin shrink-0" />}
+                      <span>1. Nota Dinas Keu</span>
+                    </div>
+                    <span className="text-[9px] block text-slate-500 font-semibold mt-0.5">
+                      {hasNd ? 'Terlampir' : 'Menunggu ND'}
+                    </span>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className={`p-2 rounded-lg border text-center transition-all ${
+                    isAuditorDone 
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900' 
+                      : hasNd
+                      ? 'bg-blue-50 border-blue-300 text-blue-950 ring-1 ring-blue-400'
+                      : 'bg-slate-50 border-slate-200 text-slate-400'
+                  }`}>
+                    <div className="flex items-center justify-center gap-1 text-[10px] font-black">
+                      {isAuditorDone ? (
+                        <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                      ) : hasNd ? (
+                        <ShieldCheck className="h-3 w-3 text-blue-600 animate-pulse shrink-0" />
+                      ) : (
+                        <Clock className="h-3 w-3 text-slate-400 shrink-0" />
+                      )}
+                      <span>2. Verif Auditor</span>
+                    </div>
+                    <span className="text-[9px] block text-slate-500 font-semibold mt-0.5">
+                      {isAuditorDone 
+                        ? 'Direkomendasikan' 
+                        : hasNd 
+                        ? (item.assignedAuditor ? `Dikeep: ${item.assignedAuditor.split(' ')[0]}` : 'Sedang Ditelaah') 
+                        : 'Menunggu ND'}
+                    </span>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className={`p-2 rounded-lg border text-center transition-all ${
+                    isFinanceDone 
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900' 
+                      : isAuditorDone
+                      ? 'bg-emerald-50/60 border-emerald-300 text-emerald-950 ring-1 ring-emerald-400'
+                      : 'bg-slate-50 border-slate-200 text-slate-400'
+                  }`}>
+                    <div className="flex items-center justify-center gap-1 text-[10px] font-black">
+                      {isFinanceDone ? (
+                        <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                      ) : isAuditorDone ? (
+                        <Clock className="h-3 w-3 text-emerald-600 animate-pulse shrink-0" />
+                      ) : (
+                        <Wallet className="h-3 w-3 text-slate-400 shrink-0" />
+                      )}
+                      <span>3. Setuju Keuangan</span>
+                    </div>
+                    <span className="text-[9px] block text-slate-500 font-semibold mt-0.5">
+                      {isFinanceDone ? 'Disetujui' : isAuditorDone ? 'Menunggu ACC' : 'Menunggu'}
+                    </span>
+                  </div>
+
+                  {/* Step 4 */}
+                  <div className={`p-2 rounded-lg border text-center transition-all ${
+                    isSppDone 
+                      ? 'bg-emerald-600 border-emerald-700 text-white' 
+                      : isFinanceDone
+                      ? 'bg-emerald-100 border-emerald-400 text-emerald-950 ring-1 ring-emerald-500'
+                      : 'bg-slate-50 border-slate-200 text-slate-400'
+                  }`}>
+                    <div className="flex items-center justify-center gap-1 text-[10px] font-black">
+                      {isSppDone ? (
+                        <CheckCircle2 className="h-3 w-3 text-white shrink-0" />
+                      ) : (
+                        <FileCheck className="h-3 w-3 text-slate-400 shrink-0" />
+                      )}
+                      <span>4. Dokumen SPP</span>
+                    </div>
+                    <span className={`text-[9px] block font-semibold mt-0.5 ${isSppDone ? 'text-emerald-100' : 'text-slate-500'}`}>
+                      {isSppDone ? 'SPP Terbit' : isFinanceDone ? 'Siap Isi SPP' : 'Menunggu'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           
           {/* Submission Info Card */}
           <div className="bg-amber-50/40 rounded-xl p-4 border border-amber-200 space-y-3">
@@ -354,15 +491,14 @@ export const FinanceProcessModal: React.FC<FinanceProcessModalProps> = ({
                     <span className="text-xs font-black text-emerald-950">{item.sppNumber}</span>
                   </div>
                   {item.sppFileUrl && (
-                    <a
-                      href={item.sppFileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs flex items-center gap-1 shrink-0"
+                    <button
+                      type="button"
+                      onClick={() => openAttachmentFile(item.sppFileUrl!, item.sppFileName || 'Dokumen_SPP.pdf')}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs flex items-center gap-1 shrink-0 cursor-pointer"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                       <span>Lihat Dokumen SPP</span>
-                    </a>
+                    </button>
                   )}
                 </div>
               </div>

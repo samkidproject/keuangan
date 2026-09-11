@@ -1,7 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import { getAnalytics, isSupported } from 'firebase/analytics';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 
 // Custom User Firebase Configuration for ba-bun
 export const firebaseConfig = {
@@ -14,18 +14,22 @@ export const firebaseConfig = {
   measurementId: "G-WZFFRMM5GL"
 };
 
+// Initialize Firebase App for ba-bun
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 export const db = getFirestore(app);
+export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// Optional Analytics initialization if supported in environment
+// Attempt silent anonymous authentication so Firestore and Firebase Storage operations
+// have a valid session context if anonymous auth is configured in Firebase console.
 if (typeof window !== 'undefined') {
-  isSupported().then((supported) => {
-    if (supported) {
-      getAnalytics(app);
-    }
-  }).catch(() => {});
+  signInAnonymously(auth).catch((err) => {
+    // Non-blocking: if anonymous auth is not enabled, public rule requests will still proceed
+    console.debug('Firebase anonymous auth status:', err?.code || err?.message || 'ready');
+  });
 }
+
+
 
 

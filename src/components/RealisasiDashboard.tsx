@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { SubmissionItem, UserRole } from '../types';
 import { DEFAULT_SATKER_ACCOUNTS } from '../data/defaultSatkers';
 import { formatToWIB } from '../lib/dateUtils';
+import { openAttachmentFile } from '../lib/firestoreService';
 import { 
   Trophy, 
   TrendingUp, 
@@ -1007,29 +1008,27 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
                               <div className="flex items-center justify-between gap-2 pt-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   {item.sppFileUrl ? (
-                                    <a
-                                      href={item.sppFileUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1"
+                                    <button
+                                      type="button"
+                                      onClick={() => openAttachmentFile(item.sppFileUrl!, item.sppFileName || 'Berkas_SPP.pdf')}
+                                      className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1 cursor-pointer"
                                     >
                                       <ExternalLink className="h-3 w-3" />
                                       <span>Buka PDF SPP</span>
-                                    </a>
+                                    </button>
                                   ) : item.fileUrl ? (
-                                    <a
-                                      href={item.fileUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-[11px] font-bold text-blue-800 hover:text-blue-950 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200 flex items-center gap-1"
+                                    <button
+                                      type="button"
+                                      onClick={() => openAttachmentFile(item.fileUrl!, item.fileName || 'Berkas_Permohonan.pdf')}
+                                      className="text-[11px] font-bold text-blue-800 hover:text-blue-950 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200 flex items-center gap-1 cursor-pointer"
                                     >
                                       <ExternalLink className="h-3 w-3" />
                                       <span>Buka Berkas</span>
-                                    </a>
+                                    </button>
                                   ) : null}
 
-                                  {/* Quick input SPP for Satker if status is selesai_keuangan and sppNumber is not yet filled */}
-                                  {currentRole === 'satker' && item.status === 'selesai_keuangan' && onOpenSppModal && (
+                                  {/* Quick input SPP if status is selesai_keuangan */}
+                                  {(currentRole === 'satker' || currentRole === 'keuangan' || currentRole === 'verifikator' || currentRole === 'admin') && item.status === 'selesai_keuangan' && onOpenSppModal && (
                                     <button
                                       type="button"
                                       onClick={() => onOpenSppModal(item)}

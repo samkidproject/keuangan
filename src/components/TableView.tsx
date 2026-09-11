@@ -53,7 +53,11 @@ export const TableView: React.FC<TableViewProps> = ({
   // Filter base items for auditor and keuangan roles (strictly only see items with Nota Dinas attached / entered auditor stage)
   const roleBaseItems = items.filter(item => {
     if (currentRole === 'auditor' || currentRole === 'keuangan') {
-      return Boolean(item.notaDinasNumber && item.notaDinasNumber.trim());
+      const hasNd = Boolean(
+        (item.notaDinasNumber && item.notaDinasNumber.trim()) ||
+        (item.notaDinasFileUrl && item.notaDinasFileUrl.trim())
+      );
+      return hasNd || item.status === 'sedang_diperiksa' || item.status === 'direkomendasikan' || item.status === 'selesai_keuangan';
     }
     return true;
   });
@@ -83,15 +87,27 @@ export const TableView: React.FC<TableViewProps> = ({
       (item.sppNumber && item.sppNumber.toLowerCase().includes(filters.search.toLowerCase())) ||
       (item.jenisPengajuan && item.jenisPengajuan.toLowerCase().includes(filters.search.toLowerCase()));
 
+    const hasNd = Boolean(
+      (item.notaDinasNumber && item.notaDinasNumber.trim()) ||
+      (item.notaDinasFileUrl && item.notaDinasFileUrl.trim())
+    );
+    const effectiveStatus = (item.status === 'belum_diperiksa' && hasNd) ? 'sedang_diperiksa' : item.status;
+
     const matchesSatker = !filters.satker || item.satker === filters.satker;
     const matchesBidang = !filters.bidang || item.bidang === filters.bidang;
-    const matchesStatus = !filters.status || item.status === filters.status;
+    const matchesStatus = !filters.status || effectiveStatus === filters.status;
 
     return matchesSearch && matchesSatker && matchesBidang && matchesStatus;
   });
 
   const getStatusBadge = (status: VerificationStatus, item: SubmissionItem) => {
-    switch (status) {
+    const hasNd = Boolean(
+      (item.notaDinasNumber && item.notaDinasNumber.trim()) ||
+      (item.notaDinasFileUrl && item.notaDinasFileUrl.trim())
+    );
+    const effectiveStatus = (status === 'belum_diperiksa' && hasNd) ? 'sedang_diperiksa' : status;
+
+    switch (effectiveStatus) {
       case 'belum_diperiksa':
         return (
           <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-950 border border-amber-300 inline-flex items-center gap-1 shadow-2xs">
@@ -101,14 +117,14 @@ export const TableView: React.FC<TableViewProps> = ({
         );
       case 'sedang_diperiksa':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-900 border border-blue-300 inline-flex items-center gap-1">
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-900 border border-blue-300 inline-flex items-center gap-1 shadow-2xs">
             <Clock className="h-3 w-3 text-blue-600 animate-spin" />
             2. Verifikasi Auditor
           </span>
         );
       case 'direkomendasikan':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-900 border border-emerald-300 inline-flex items-center gap-1">
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-900 border border-emerald-300 inline-flex items-center gap-1 shadow-2xs">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
             3. Direkomendasikan Auditor
           </span>
@@ -116,7 +132,7 @@ export const TableView: React.FC<TableViewProps> = ({
       case 'perlu_perbaikan':
       case 'ditolak':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-800 border border-rose-300 inline-flex items-center gap-1">
+          <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-800 border border-rose-300 inline-flex items-center gap-1 shadow-2xs">
             <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />
             Perlu Perbaikan / Revisi
           </span>
@@ -131,24 +147,30 @@ export const TableView: React.FC<TableViewProps> = ({
     }
   };
 
-  const renderStatusProgress = (status: VerificationStatus) => {
+  const renderStatusProgress = (item: SubmissionItem) => {
+    const hasNd = Boolean(
+      (item.notaDinasNumber && item.notaDinasNumber.trim()) ||
+      (item.notaDinasFileUrl && item.notaDinasFileUrl.trim())
+    );
+    const effectiveStatus = (item.status === 'belum_diperiksa' && hasNd) ? 'sedang_diperiksa' : item.status;
+
     let step = 1;
-    if (status === 'sedang_diperiksa') step = 2;
-    if (status === 'direkomendasikan') step = 3;
-    if (status === 'selesai_keuangan') step = 4;
-    if (status === 'perlu_perbaikan') step = 1.5;
+    if (effectiveStatus === 'sedang_diperiksa') step = 2;
+    if (effectiveStatus === 'direkomendasikan') step = 3;
+    if (effectiveStatus === 'selesai_keuangan') step = 4;
+    if (effectiveStatus === 'perlu_perbaikan') step = 1.5;
 
     return (
       <div className="w-full space-y-1">
         <div className="flex items-center justify-between text-[9px] font-extrabold text-slate-500">
           <span className={step >= 1 ? 'text-amber-800' : ''}>Verif Keu</span>
-          <span className={step >= 2 ? 'text-blue-800' : ''}>Auditor</span>
+          <span className={step >= 2 ? 'text-blue-800 font-black' : ''}>Auditor</span>
           <span className={step >= 3 ? 'text-emerald-700' : ''}>Setuju Keu</span>
           <span className={step >= 4 ? 'text-emerald-900 font-black' : ''}>SPP</span>
         </div>
         <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200 flex">
           <div className={`h-full transition-all duration-500 ${
-            status === 'perlu_perbaikan' 
+            effectiveStatus === 'perlu_perbaikan' 
               ? 'w-1/2 bg-rose-500' 
               : step === 4 
               ? 'w-full bg-emerald-500' 
@@ -390,7 +412,7 @@ export const TableView: React.FC<TableViewProps> = ({
                       {/* Status & Progress Stepper */}
                       <td className="py-3.5 px-3.5 space-y-1.5">
                         <div>{getStatusBadge(item.status, item)}</div>
-                        {renderStatusProgress(item.status)}
+                        {renderStatusProgress(item)}
                         
                         {item.assignedAuditor ? (
                           <div className="text-[10px] text-purple-950 font-black bg-purple-100 border border-purple-300 px-2 py-0.5 rounded-md w-fit flex items-center gap-1 shadow-2xs" title="Berkas sedang dikeep/ditelaah oleh Auditor ini">
@@ -419,24 +441,25 @@ export const TableView: React.FC<TableViewProps> = ({
                       <td className="py-3.5 px-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5 flex-wrap">
                           
+                          {/* SPP Input/Edit for Selesai Keuangan (Satker, Keuangan, Verifikator) */}
+                          {item.status === 'selesai_keuangan' && onOpenSppModal && (currentRole === 'satker' || currentRole === 'keuangan' || currentRole === 'verifikator') && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenSppModal(item)}
+                              className={`px-3 py-1.5 font-black rounded-xl text-xs shadow-xs transition-all inline-flex items-center gap-1 transform active:scale-95 ${
+                                item.sppNumber
+                                  ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-950 border border-emerald-300'
+                                  : 'bg-emerald-600 hover:bg-emerald-500 text-white animate-bounce'
+                              }`}
+                            >
+                              <FileCheck className="h-3.5 w-3.5" />
+                              <span>{item.sppNumber ? 'Edit SPP' : 'Isi Data SPP'}</span>
+                            </button>
+                          )}
+
                           {/* Satker Actions */}
                           {currentRole === 'satker' && (
                             <>
-                              {item.status === 'selesai_keuangan' && onOpenSppModal && (
-                                <button
-                                  type="button"
-                                  onClick={() => onOpenSppModal(item)}
-                                  className={`px-3 py-1.5 font-black rounded-xl text-xs shadow-xs transition-all inline-flex items-center gap-1 transform active:scale-95 ${
-                                    item.sppNumber
-                                      ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-950 border border-emerald-300'
-                                      : 'bg-emerald-600 hover:bg-emerald-500 text-white animate-bounce'
-                                  }`}
-                                >
-                                  <FileCheck className="h-3.5 w-3.5" />
-                                  <span>{item.sppNumber ? 'Edit SPP' : 'Isi Data SPP'}</span>
-                                </button>
-                              )}
-
                               {item.status === 'perlu_perbaikan' && onOpenReviseModal && (
                                 <button
                                   type="button"

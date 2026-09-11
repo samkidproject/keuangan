@@ -340,12 +340,12 @@ export const AuditorVerifyModal: React.FC<AuditorVerifyModalProps> = ({
             </div>
 
             {/* Nota Dinas Verifikator Keuangan Box */}
-            {item.notaDinasNumber ? (
+            {Boolean((item.notaDinasNumber && item.notaDinasNumber.trim()) || (item.notaDinasFileUrl && item.notaDinasFileUrl.trim())) ? (
               <div className="pt-2 border-t border-amber-200 bg-amber-100/90 p-2.5 rounded-lg border border-amber-300">
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-[10px] font-black text-amber-950 uppercase tracking-wider block">Nota Dinas Verifikator Keuangan:</span>
-                    <span className="text-xs font-black text-slate-900">{item.notaDinasNumber}</span>
+                    <span className="text-xs font-black text-slate-900">{item.notaDinasNumber || item.notaDinasFileName || 'Dokumen Nota Dinas Terlampir'}</span>
                   </div>
                   {item.notaDinasFileUrl && (
                     <a

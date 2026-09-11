@@ -2,12 +2,13 @@ import {
   collection, 
   doc, 
   setDoc, 
+  getDoc,
   deleteDoc,
   onSnapshot, 
   getDocs,
   writeBatch
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { SubmissionItem, SatkerAccount } from '../types';
 
 const SUBMISSIONS_COLLECTION = 'submissions';
@@ -40,15 +41,19 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const currentUser = auth?.currentUser;
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: null,
-      email: null,
-      emailVerified: null,
-      isAnonymous: null,
-      tenantId: null,
-      providerInfo: []
+      userId: currentUser?.uid || null,
+      email: currentUser?.email || null,
+      emailVerified: currentUser?.emailVerified || null,
+      isAnonymous: currentUser?.isAnonymous || null,
+      tenantId: currentUser?.tenantId || null,
+      providerInfo: currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
     },
     operationType,
     path
@@ -103,7 +108,8 @@ export function subscribeToSubmissions(
     },
     (err) => {
       console.error('Firestore submission subscription error:', err);
-      if (onError) onError(err);
+      const customErr = handleFirestoreError(err, OperationType.LIST, SUBMISSIONS_COLLECTION);
+      if (onError) onError(customErr);
     }
   );
 }
@@ -128,7 +134,8 @@ export function subscribeToSatkerAccounts(
     },
     (err) => {
       console.error('Firestore accounts subscription error:', err);
-      if (onError) onError(err);
+      const customErr = handleFirestoreError(err, OperationType.LIST, ACCOUNTS_COLLECTION);
+      if (onError) onError(customErr);
     }
   );
 }
@@ -141,6 +148,7 @@ export async function saveSatkerAccountToFirestore(account: SatkerAccount) {
     await setDoc(docRef, cleanForFirestore(account), { merge: true });
   } catch (err) {
     console.error('Failed to save account to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, ACCOUNTS_COLLECTION);
   }
 }
 
@@ -155,6 +163,7 @@ export async function saveAllSatkerAccountsToFirestore(accounts: SatkerAccount[]
     await batch.commit();
   } catch (err) {
     console.error('Failed to save all accounts to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, ACCOUNTS_COLLECTION);
   }
 }
 
@@ -165,6 +174,122 @@ export async function deleteSatkerAccountFromFirestore(accountId: string) {
     await deleteDoc(docRef);
   } catch (err) {
     console.error('Failed to delete account from Firestore:', err);
+    handleFirestoreError(err, OperationType.DELETE, ACCOUNTS_COLLECTION);
+  }
+}
+
+// In-memory cache for resolved chunked attachments
+const attachmentCache = new Map<string, string>();
+
+/**
+ * Saves large Base64 / data URL attachments to Firestore subcollection in 300KB chunks.
+ * This completely avoids Firestore's 1MB document limit for submissions.
+ */
+export async function saveLargeAttachmentToFirestore(
+  docId: string,
+  fieldName: string,
+  dataUrl: string
+): Promise<string> {
+  const CHUNK_SIZE = 300 * 1024; // 300 KB per chunk (safe within 1MB limit)
+  const totalChunks = Math.ceil(dataUrl.length / CHUNK_SIZE);
+  const chunksColRef = collection(db, SUBMISSIONS_COLLECTION, docId, `${fieldName}_chunks`);
+
+  for (let i = 0; i < totalChunks; i++) {
+    const chunkData = dataUrl.substring(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+    const chunkDocRef = doc(chunksColRef, `chunk_${i}`);
+    await setDoc(chunkDocRef, {
+      index: i,
+      total: totalChunks,
+      data: chunkData,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  const chunkRef = `firestore-chunked:${docId}:${fieldName}:${totalChunks}`;
+  attachmentCache.set(chunkRef, dataUrl);
+  return chunkRef;
+}
+
+/**
+ * Resolves a chunked attachment reference back to its full Base64 / data URL string.
+ */
+export async function resolveChunkedAttachment(chunkRef: string): Promise<string> {
+  if (!chunkRef || !chunkRef.startsWith('firestore-chunked:')) return chunkRef;
+  if (attachmentCache.has(chunkRef)) {
+    return attachmentCache.get(chunkRef)!;
+  }
+
+  try {
+    const parts = chunkRef.split(':');
+    if (parts.length < 4) return chunkRef;
+    const docId = parts[1];
+    const fieldName = parts[2];
+    const totalChunks = parseInt(parts[3], 10);
+
+    const chunksColRef = collection(db, SUBMISSIONS_COLLECTION, docId, `${fieldName}_chunks`);
+    const chunks: string[] = new Array(totalChunks).fill('');
+
+    for (let i = 0; i < totalChunks; i++) {
+      const chunkDocRef = doc(chunksColRef, `chunk_${i}`);
+      const snap = await getDoc(chunkDocRef);
+      if (snap.exists()) {
+        const d = snap.data();
+        chunks[i] = d.data || '';
+      }
+    }
+
+    const fullData = chunks.join('');
+    if (fullData) {
+      attachmentCache.set(chunkRef, fullData);
+    }
+    return fullData || chunkRef;
+  } catch (err) {
+    console.warn('Error resolving chunked attachment from Firestore:', err);
+    return chunkRef;
+  }
+}
+
+/**
+ * Helper to safely open or download any attachment file (Google Drive, Cloud Storage, or Base64/Blob).
+ */
+export async function openAttachmentFile(url: string, fileName?: string) {
+  if (!url) return;
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  let actualUrl = url;
+  if (url.startsWith('firestore-chunked:')) {
+    actualUrl = await resolveChunkedAttachment(url);
+  }
+
+  if (actualUrl.startsWith('data:')) {
+    try {
+      const arr = actualUrl.split(',');
+      const mime = arr[0].match(/:(.*?);/)?.[1] || 'application/pdf';
+      const bstr = atob(arr[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      const blob = new Blob([u8arr], { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+      const win = window.open(blobUrl, '_blank');
+      if (!win) {
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = fileName || 'Dokumen.pdf';
+        a.click();
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch (e) {
+      console.error('Error opening data URL:', e);
+      window.open(actualUrl, '_blank');
+    }
+  } else {
+    window.open(actualUrl, '_blank', 'noopener,noreferrer');
   }
 }
 
@@ -174,16 +299,38 @@ export async function saveSubmissionToFirestore(item: SubmissionItem) {
     const rawId = item.submissionId || item.id || `sub-${Date.now()}`;
     const docId = rawId.replace(/\//g, '_');
     const docRef = doc(db, SUBMISSIONS_COLLECTION, docId);
+
+    // Safeguard: Check if file attachments contain large Base64 strings (> 350KB)
+    // and split them into Firestore chunk subcollections to prevent "Document exceeds 1MB"
+    const processedItem = { ...item };
+    const attachmentKeys: Array<'fileUrl' | 'sppFileUrl' | 'notaDinasFileUrl' | 'auditorNotaDinasFileUrl'> = [
+      'fileUrl', 'sppFileUrl', 'notaDinasFileUrl', 'auditorNotaDinasFileUrl'
+    ];
+
+    for (const key of attachmentKeys) {
+      const val = processedItem[key];
+      if (typeof val === 'string' && val.startsWith('data:') && val.length > 350000) {
+        try {
+          const chunkRef = await saveLargeAttachmentToFirestore(docId, key, val);
+          processedItem[key] = chunkRef;
+        } catch (chunkErr) {
+          console.warn(`Could not chunk ${key}, will attempt direct save:`, chunkErr);
+        }
+      }
+    }
+
     const cleanedData = cleanForFirestore({
-      ...item,
+      ...processedItem,
       id: item.id || rawId,
       submissionId: item.submissionId || rawId,
       updatedAt: new Date().toISOString()
     });
+
     await setDoc(docRef, cleanedData, { merge: true });
     console.log(`Successfully saved submission ${docId} to Firebase Firestore.`);
   } catch (err) {
     console.error('Failed to save submission to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, SUBMISSIONS_COLLECTION);
     throw err;
   }
 }
@@ -240,6 +387,7 @@ export async function deleteSubmissionFromFirestore(rawId: string, secondaryId?:
     }
   } catch (err) {
     console.error('Failed to delete submission from Firestore:', err);
+    handleFirestoreError(err, OperationType.DELETE, SUBMISSIONS_COLLECTION);
     throw err;
   }
 }
@@ -268,6 +416,7 @@ export async function syncLocalSubmissionsToFirestore(localItems: SubmissionItem
     }
   } catch (err) {
     console.warn('Failed to sync local submissions to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, SUBMISSIONS_COLLECTION);
   }
 }
 

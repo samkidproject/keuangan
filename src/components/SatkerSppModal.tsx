@@ -58,15 +58,13 @@ export const SatkerSppModal: React.FC<SatkerSppModalProps> = ({
     const trimmedFileUrl = sppFileUrl.trim();
 
     if (!trimmedSppNumber) {
-      setErrorMsg('Nomor SPP wajib diisi.');
-      return;
-    }
-    if (!trimmedFileUrl) {
-      setErrorMsg('Dokumen / Berkas SPP wajib diunggah atau diisikan tautan linknya.');
+      setErrorMsg('Nomor SPP (Surat Perintah Pembayaran) wajib diisi.');
       return;
     }
 
-    const finalFileName = sppFileName.trim() || `Berkas_SPP_${trimmedSppNumber.replace(/[^a-zA-Z0-9.-]/g, '_')}.pdf`;
+    const finalFileName = trimmedFileUrl 
+      ? (sppFileName.trim() || `Berkas_SPP_${trimmedSppNumber.replace(/[^a-zA-Z0-9.-]/g, '_')}.pdf`)
+      : '';
     const saveFn = onSaveSpp || onSaveSppData;
 
     if (!saveFn) {
@@ -81,7 +79,7 @@ export const SatkerSppModal: React.FC<SatkerSppModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error("Error saving SPP data:", err);
-      setErrorMsg(err?.message || 'Terjadi kesalahan saat menyimpan data SPP. Silakan coba lagi.');
+      setErrorMsg(err?.message || 'Terjadi kendala saat menyimpan data SPP ke Firebase. Silakan periksa koneksi internet Anda atau gunakan link Google Drive.');
     } finally {
       setIsSubmitting(false);
     }
@@ -185,8 +183,8 @@ export const SatkerSppModal: React.FC<SatkerSppModalProps> = ({
               setSppFileUrl(url);
               if (name) setSppFileName(name);
             }}
-            label="Dokumen Berkas SPP Satker"
-            required={true}
+            label="Dokumen / Berkas SPP Satker (Opsional, dapat menyusul)"
+            required={false}
             accentColor="emerald"
           />
 

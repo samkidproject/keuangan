@@ -112,13 +112,26 @@ export const ColumnBoard: React.FC<ColumnBoardProps> = ({
 
   // Base items visible depending on user role (auditor & keuangan strictly only see items with Nota Dinas attached / entered auditor stage)
   const visibleItems = (currentRole === 'auditor' || currentRole === 'keuangan')
-    ? items.filter(item => Boolean(item.notaDinasNumber && item.notaDinasNumber.trim()))
+    ? items.filter(item => {
+        const hasNd = Boolean(
+          (item.notaDinasNumber && item.notaDinasNumber.trim()) ||
+          (item.notaDinasFileUrl && item.notaDinasFileUrl.trim())
+        );
+        return hasNd || item.status === 'sedang_diperiksa' || item.status === 'direkomendasikan' || item.status === 'selesai_keuangan';
+      })
     : items;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 items-start">
       {columns.map(col => {
-        const colItems = visibleItems.filter(item => item.status === col.id);
+        const colItems = visibleItems.filter(item => {
+          const hasNd = Boolean(
+            (item.notaDinasNumber && item.notaDinasNumber.trim()) ||
+            (item.notaDinasFileUrl && item.notaDinasFileUrl.trim())
+          );
+          const effectiveStatus = (item.status === 'belum_diperiksa' && hasNd) ? 'sedang_diperiksa' : item.status;
+          return effectiveStatus === col.id;
+        });
 
         return (
           <div
@@ -336,23 +349,24 @@ export const ColumnBoard: React.FC<ColumnBoardProps> = ({
 
                         {/* Action Buttons Group */}
                         <div className="flex items-center gap-1.5 ml-auto flex-wrap">
+                          {/* SPP Input/Edit for Selesai Keuangan (Satker & Keuangan) */}
+                          {item.status === 'selesai_keuangan' && onOpenSppModal && (currentRole === 'satker' || currentRole === 'keuangan' || currentRole === 'verifikator') && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenSppModal(item)}
+                              className={`px-2.5 py-1.5 font-black rounded-lg text-xs shadow-xs transition-all flex items-center gap-1 ${
+                                item.sppNumber
+                                  ? 'bg-emerald-900/60 hover:bg-emerald-800/80 text-emerald-200 border border-emerald-600'
+                                  : 'bg-emerald-600 hover:bg-emerald-500 text-white animate-bounce'
+                              }`}
+                            >
+                              <FileCheck className="h-3.5 w-3.5" />
+                              <span>{item.sppNumber ? 'Edit SPP' : 'Isi SPP'}</span>
+                            </button>
+                          )}
+
                           {currentRole === 'satker' ? (
                             <>
-                              {item.status === 'selesai_keuangan' && onOpenSppModal && (
-                                <button
-                                  type="button"
-                                  onClick={() => onOpenSppModal(item)}
-                                  className={`px-2.5 py-1.5 font-black rounded-lg text-xs shadow-xs transition-all flex items-center gap-1 ${
-                                    item.sppNumber
-                                      ? 'bg-emerald-900/60 hover:bg-emerald-800/80 text-emerald-200 border border-emerald-600'
-                                      : 'bg-emerald-600 hover:bg-emerald-500 text-white animate-bounce'
-                                  }`}
-                                >
-                                  <FileCheck className="h-3.5 w-3.5" />
-                                  <span>{item.sppNumber ? 'Edit SPP' : 'Isi SPP'}</span>
-                                </button>
-                              )}
-
                               {item.status === 'perlu_perbaikan' && onOpenReviseModal ? (
                                 <button
                                   type="button"

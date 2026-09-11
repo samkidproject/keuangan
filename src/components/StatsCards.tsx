@@ -19,15 +19,32 @@ interface StatsCardsProps {
 
 export const StatsCards: React.FC<StatsCardsProps> = ({ items, currentRole }) => {
   const roleItems = (currentRole === 'auditor' || currentRole === 'keuangan')
-    ? items.filter(i => Boolean(i.notaDinasNumber && i.notaDinasNumber.trim()))
+    ? items.filter(i => {
+        const hasNd = Boolean(
+          (i.notaDinasNumber && i.notaDinasNumber.trim()) ||
+          (i.notaDinasFileUrl && i.notaDinasFileUrl.trim())
+        );
+        return hasNd || i.status === 'sedang_diperiksa' || i.status === 'direkomendasikan' || i.status === 'selesai_keuangan';
+      })
     : items;
 
+  const getEffectiveStatus = (i: SubmissionItem) => {
+    const hasNd = Boolean(
+      (i.notaDinasNumber && i.notaDinasNumber.trim()) ||
+      (i.notaDinasFileUrl && i.notaDinasFileUrl.trim())
+    );
+    if (i.status === 'belum_diperiksa' && hasNd) {
+      return 'sedang_diperiksa';
+    }
+    return i.status;
+  };
+
   const total = roleItems.length;
-  const belumDiperiksa = roleItems.filter(i => i.status === 'belum_diperiksa').length;
-  const sedangDiperiksa = roleItems.filter(i => i.status === 'sedang_diperiksa').length;
-  const direkomendasikan = roleItems.filter(i => i.status === 'direkomendasikan').length;
-  const perluPerbaikan = roleItems.filter(i => i.status === 'perlu_perbaikan' || i.status === 'ditolak').length;
-  const selesaiKeuangan = roleItems.filter(i => i.status === 'selesai_keuangan').length;
+  const belumDiperiksa = roleItems.filter(i => getEffectiveStatus(i) === 'belum_diperiksa').length;
+  const sedangDiperiksa = roleItems.filter(i => getEffectiveStatus(i) === 'sedang_diperiksa').length;
+  const direkomendasikan = roleItems.filter(i => getEffectiveStatus(i) === 'direkomendasikan').length;
+  const perluPerbaikan = roleItems.filter(i => getEffectiveStatus(i) === 'perlu_perbaikan' || getEffectiveStatus(i) === 'ditolak').length;
+  const selesaiKeuangan = roleItems.filter(i => getEffectiveStatus(i) === 'selesai_keuangan').length;
 
   // Percentage verified by Auditor
   const totalAudited = direkomendasikan + selesaiKeuangan;

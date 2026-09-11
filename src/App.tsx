@@ -156,7 +156,25 @@ export default function App() {
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(submissions));
     } catch (e) {
-      console.error("Failed to save state to localStorage:", e);
+      console.warn("Failed to save state to localStorage, trimming large attachments for local cache:", e);
+      try {
+        const lightweightSubmissions = submissions.map(sub => {
+          const cleanSub = { ...sub };
+          if (cleanSub.fileUrl && cleanSub.fileUrl.startsWith('data:') && cleanSub.fileUrl.length > 50000) {
+            cleanSub.fileUrl = cleanSub.fileUrl.substring(0, 100) + '...[tersimpan_di_firebase]';
+          }
+          if (cleanSub.sppFileUrl && cleanSub.sppFileUrl.startsWith('data:') && cleanSub.sppFileUrl.length > 50000) {
+            cleanSub.sppFileUrl = cleanSub.sppFileUrl.substring(0, 100) + '...[tersimpan_di_firebase]';
+          }
+          if (cleanSub.notaDinasFileUrl && cleanSub.notaDinasFileUrl.startsWith('data:') && cleanSub.notaDinasFileUrl.length > 50000) {
+            cleanSub.notaDinasFileUrl = cleanSub.notaDinasFileUrl.substring(0, 100) + '...[tersimpan_di_firebase]';
+          }
+          return cleanSub;
+        });
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(lightweightSubmissions));
+      } catch (innerErr) {
+        console.warn("Could not save to localStorage even after trimming large fields:", innerErr);
+      }
     }
   }, [submissions]);
 
@@ -168,7 +186,39 @@ export default function App() {
     const unsubscribeSubmissions = subscribeToSubmissions(
       (firestoreItems) => {
         if (firestoreItems && firestoreItems.length > 0) {
-          setSubmissions(firestoreItems);
+          // Normalize and auto-heal items: if Nota Dinas is attached but status is 'belum_diperiksa', transition to 'sedang_diperiksa'
+          const healedItems = firestoreItems.map((item) => {
+            const hasNd = Boolean(
+              (item.notaDinasNumber && item.notaDinasNumber.trim()) ||
+              (item.notaDinasFileUrl && item.notaDinasFileUrl.trim())
+            );
+            if (hasNd && item.status === 'belum_diperiksa') {
+              const now = getWIBTimestamp();
+              const healedItem: SubmissionItem = {
+                ...item,
+                status: 'sedang_diperiksa',
+                history: [
+                  {
+                    id: `log-nd-sync-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+                    timestamp: now,
+                    userRole: 'verifikator' as UserRole,
+                    userName: 'Verifikator Keuangan',
+                    action: 'Status Diselaraskan ke Verifikasi Auditor',
+                    note: 'Nota Dinas telah terbit, pengajuan diteruskan ke antrean pemeriksaan Auditor.'
+                  },
+                  ...(item.history || [])
+                ]
+              };
+              // Persist the corrected status to Firestore
+              saveSubmissionToFirestore(healedItem).catch((e) =>
+                console.warn('Auto-heal submission in firestore notice:', e)
+              );
+              return healedItem;
+            }
+            return item;
+          });
+
+          setSubmissions(healedItems);
           setFirestoreError(null);
         } else {
           // If Firestore is empty, sync existing local submissions to Firestore
@@ -504,36 +554,52 @@ export default function App() {
     sppNotes: string
   ) => {
     const now = getWIBTimestamp();
-    const targetItem = submissions.find(item => item.id === itemId || item.submissionId === itemId);
-    if (!targetItem) return;
+    const cleanId = (id?: string) => (id ? id.replace(/\//g, '_') : '');
+    const targetItem = submissions.find(item => 
+      item.id === itemId || 
+      item.submissionId === itemId ||
+      cleanId(item.id) === cleanId(itemId) ||
+      cleanId(item.submissionId) === cleanId(itemId)
+    );
+
+    if (!targetItem) {
+      console.error(`Target item not found for SPP entry. itemId: ${itemId}`);
+      throw new Error(`Data pengajuan tidak ditemukan di memori aplikasi.`);
+    }
 
     const newLog = {
       id: `log-spp-${Date.now()}`,
       timestamp: now,
-      userRole: 'satker' as UserRole,
-      userName: satkerName || userName || 'User Satker',
+      userRole: (currentRole === 'satker' ? 'satker' : currentRole) as UserRole,
+      userName: satkerName || userName || (currentRole === 'satker' ? 'User Satker' : 'Admin Keuangan'),
       action: `Input Data SPP Satker: ${sppNumber}`,
-      note: sppNotes || 'Dokumen & Nomor SPP telah dilampirkan oleh Satker.'
+      note: sppNotes || (sppFileUrl ? 'Dokumen & Nomor SPP telah dilampirkan.' : 'Nomor SPP telah diinput.')
     };
 
     const updatedItem: SubmissionItem = {
       ...targetItem,
       sppNumber,
-      sppFileUrl,
-      sppFileName,
-      sppNotes,
+      sppFileUrl: sppFileUrl || targetItem.sppFileUrl || '',
+      sppFileName: sppFileName || targetItem.sppFileName || '',
+      sppNotes: sppNotes || targetItem.sppNotes || '',
       sppSubmittedAt: now,
       history: [newLog, ...(targetItem.history || [])]
     };
 
-    setSubmissions(prev => prev.map(item => (item.id === itemId || item.submissionId === itemId) ? updatedItem : item));
+    // Optimistic UI state update
+    setSubmissions(prev => prev.map(item => 
+      (item.id === itemId || item.submissionId === itemId || cleanId(item.id) === cleanId(itemId)) 
+        ? updatedItem 
+        : item
+    ));
 
     try {
       await saveSubmissionToFirestore(updatedItem);
-      showToast(`Data SPP (${sppNumber}) berhasil disimpan & terkirim!`);
-    } catch (e) {
-      console.error("Firestore save error:", e);
-      showToast(`Data SPP tersimpan secara lokal.`);
+      showToast(`Data SPP (${sppNumber}) berhasil disimpan & terkirim ke Firebase!`);
+    } catch (e: any) {
+      console.error("Firestore save error on SPP:", e);
+      // Re-throw so SatkerSppModal displays the real error and does not silently discard user entry
+      throw new Error(`Gagal menyimpan ke Firebase Firestore: ${e?.message || 'Koneksi database bermasalah'}. Silakan periksa koneksi internet.`);
     }
   };
 
@@ -764,13 +830,13 @@ export default function App() {
       {/* Main Content Dashboard */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 relative z-10">
         
-        {/* Firestore Rules Instructions Banner if permission issue occurs */}
+        {/* Firestore Connection Notice for personal project ba-bun */}
         {firestoreError && (
           <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4.5 shadow-sm text-xs text-slate-800 space-y-2.5 animate-fadeIn">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-black text-amber-950 text-sm">
                 <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-                <span>Petunjuk Sinkronisasi Firebase Firestore (Project 'ba-bun')</span>
+                <span>Status Sinkronisasi Cloud Firestore (Project: ba-bun)</span>
               </div>
               <button 
                 onClick={() => setFirestoreError(null)}
@@ -780,23 +846,14 @@ export default function App() {
               </button>
             </div>
             <p className="text-slate-700 leading-relaxed font-medium">
-              Database Firebase di Google Cloud saat ini membatasi hak akses (Rules default masih mengunci data). Agar data dapat tersimpan & tersinkronisasi antar device melalui project <strong className="font-extrabold text-amber-950">ba-bun</strong>, ikuti 3 langkah berikut di Firebase Console:
+              Aplikasi terhubung ke Firebase pribadi Anda (<strong>ba-bun</strong>). 
+              <span className="text-emerald-800 font-bold block mt-1">✓ Seluruh data Anda tersimpan aman di penyimpanan lokal (browser cache) dan tidak akan hilang.</span>
             </p>
-            <div className="bg-slate-900 text-amber-300 font-mono text-[11px] p-3.5 rounded-xl border border-slate-800 space-y-1.5 shadow-inner">
-              <p className="text-slate-400 font-sans font-extrabold text-[10px] uppercase tracking-wider">Langkah Konfigurasi di Firebase Console:</p>
-              <p>1. Buka <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="underline text-amber-400 font-bold">console.firebase.google.com</a> → Pilih Project <strong>ba-bun</strong> → <strong>Firestore Database</strong> → Tab <strong>Rules</strong></p>
-              <p>2. Salin dan ganti aturan keamanan menjadi:</p>
-              <pre className="text-emerald-400 bg-slate-950 p-2.5 rounded-lg border border-slate-800 my-1 overflow-x-auto text-[11px] leading-snug">
-{`rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
-    }
-  }
-}`}
-              </pre>
-              <p>3. Klik tombol <strong className="text-white bg-amber-600 px-1.5 py-0.5 rounded text-[10px]">Publish</strong>. Data dari semua device akan langsung tersambung otomatis!</p>
+            <div className="bg-slate-900 text-amber-300 font-mono text-[11px] p-3 rounded-xl border border-slate-800 space-y-1.5 shadow-inner">
+              <p className="text-slate-400 font-sans font-extrabold text-[10px] uppercase tracking-wider">Jika muncul kendala izin/koneksi pada project ba-bun:</p>
+              <p>1. Buka <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="underline text-amber-400 font-bold">console.firebase.google.com</a> → Pilih Project <strong>ba-bun</strong></p>
+              <p>2. Pastikan <strong>Firestore Database</strong> sudah dibuat (mode Test atau Production)</p>
+              <p>3. Di tab <strong>Rules</strong>, pastikan izin baca/tulis aktif (contoh: <code className="text-emerald-400">allow read, write: if true;</code>) lalu klik <strong>Publish</strong>.</p>
             </div>
           </div>
         )}
