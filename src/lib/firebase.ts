@@ -1,34 +1,38 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAuth, signInAnonymously } from 'firebase/auth';
+import firebaseConfig from '../../firebase-applet-config.json';
 
-// Custom User Firebase Configuration for ba-bun
-export const firebaseConfig = {
-  apiKey: "AIzaSyAWZPW-Ff_B404d0OikYYVkIeE8HGHeqyA",
-  authDomain: "ba-bun.firebaseapp.com",
-  projectId: "ba-bun",
-  storageBucket: "ba-bun.firebasestorage.app",
-  messagingSenderId: "812134788785",
-  appId: "1:812134788785:web:741d9d86483b2b189b7c90",
-  measurementId: "G-WZFFRMM5GL"
-};
-
-// Initialize Firebase App for ba-bun
+// Initialize Firebase App using AI Studio provisioned configuration
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-export const db = getFirestore(app);
+// CRITICAL: Connect with the provisioned firestoreDatabaseId
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// Attempt silent anonymous authentication so Firestore and Firebase Storage operations
-// have a valid session context if anonymous auth is configured in Firebase console.
+// Validate Connection to Firestore on startup
 if (typeof window !== 'undefined') {
+  getDocFromServer(doc(db, 'test', 'connection'))
+    .then(() => {
+      console.log('[Firebase] Cloud Firestore terhubung:', firebaseConfig.firestoreDatabaseId);
+    })
+    .catch((error) => {
+      if (error instanceof Error && error.message.includes('the client is offline')) {
+        console.error('Please check your Firebase network/configuration.');
+      } else {
+        console.debug('[Firebase] Connection ping:', error?.message || 'ready');
+      }
+    });
+
+  // Optional anonymous sign-in session
   signInAnonymously(auth).catch((err) => {
-    // Non-blocking: if anonymous auth is not enabled, public rule requests will still proceed
-    console.debug('Firebase anonymous auth status:', err?.code || err?.message || 'ready');
+    console.debug('Firebase auth session:', err?.code || err?.message || 'ready');
   });
 }
+
+export { firebaseConfig };
 
 
 

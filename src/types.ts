@@ -34,8 +34,19 @@ export interface SatkerAccount {
   whatsappNumber?: string;
   password?: string;
   bidangDefault?: string;
+  paguAnggaran?: number;
   status: 'aktif' | 'nonaktif';
   createdAt: string;
+}
+
+export interface SatkerPagu {
+  id?: string;
+  satkerName: string;
+  paguAnggaran: number;
+  tahunAnggaran?: number;
+  keterangan?: string;
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 export interface SubmissionItem {

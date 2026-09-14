@@ -2,28 +2,98 @@
   "entities": {
     "submissions": {
       "title": "Submission",
-      "description": "Data pengajuan permohonan BA BUN dari Satker",
+      "description": "Data pengajuan permohonan BA BUN dari Satker se-Wilayah Kejaksaan Tinggi Lampung",
       "properties": {
         "submissionId": { "type": "string" },
+        "id": { "type": "string" },
         "submissionTime": { "type": "string" },
         "satker": { "type": "string" },
         "bidang": { "type": "string" },
+        "jenisPengajuan": { "type": "string" },
+        "nominal": { "type": "number" },
         "fileUrl": { "type": "string" },
         "fileName": { "type": "string" },
+        "notesFromSatker": { "type": "string" },
         "status": { "type": "string" },
-        "checklist": { "type": "map" },
+        "checklist": { "type": "object" },
         "auditorRecommendation": { "type": "string" },
         "auditorNotes": { "type": "string" },
         "auditorName": { "type": "string" },
+        "assignedAuditor": { "type": "string" },
+        "auditorLockStatus": { "type": "string" },
+        "auditorApprovedNominal": { "type": "number" },
+        "auditorNotaDinasNumber": { "type": "string" },
+        "auditorNotaDinasFileUrl": { "type": "string" },
+        "auditorNotaDinasFileName": { "type": "string" },
+        "auditorNotaDinasNotes": { "type": "string" },
+        "auditorNotaDinasCreatedAt": { "type": "string" },
         "verifiedAt": { "type": "string" },
+        "notaDinasNumber": { "type": "string" },
+        "notaDinasFileUrl": { "type": "string" },
+        "notaDinasFileName": { "type": "string" },
+        "notaDinasNotes": { "type": "string" },
+        "notaDinasCreatedAt": { "type": "string" },
         "financeStatus": { "type": "string" },
         "financeNotes": { "type": "string" },
         "financeProcessedAt": { "type": "string" },
+        "sppNumber": { "type": "string" },
+        "sppFileUrl": { "type": "string" },
+        "sppFileName": { "type": "string" },
+        "sppNotes": { "type": "string" },
+        "sppSubmittedAt": { "type": "string" },
         "history": { "type": "array" },
         "source": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
       "required": ["submissionId", "status"]
+    },
+    "satker_accounts": {
+      "title": "SatkerAccount",
+      "description": "Akun login dan otentikasi Satker Kejaksaan Negeri / Cabjari dan Pengelola",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "satkerName": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string" },
+        "contactPerson": { "type": "string" },
+        "phone": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["username", "password", "satkerName", "role", "status"]
+    },
+    "satker_pagu": {
+      "title": "SatkerPagu",
+      "description": "Data Pagu DIPA Anggaran per Satker untuk perhitungan dan perankingan realisasi belanja",
+      "properties": {
+        "satkerName": { "type": "string" },
+        "paguAnggaran": { "type": "number" },
+        "tahunAnggaran": { "type": "number" },
+        "keterangan": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["satkerName", "paguAnggaran"]
+    }
+  },
+  "firestore": {
+    "/submissions/{submissionId}": {
+      "schema": "submissions",
+      "description": "Dokumen permohonan pengajuan BA BUN"
+    },
+    "/submissions/{submissionId}/{chunkCol}/{chunkId}": {
+      "schema": "submissions",
+      "description": "Subkoleksi chunk berkas dokumen lampiran Base64 permohonan"
+    },
+    "/satker_accounts/{accountId}": {
+      "schema": "satker_accounts",
+      "description": "Koleksi akun satker dan staf pengelola"
+    },
+    "/satker_pagu/{paguId}": {
+      "schema": "satker_pagu",
+      "description": "Koleksi alokasi pagu DIPA masing-masing satuan kerja"
     }
   }
 }

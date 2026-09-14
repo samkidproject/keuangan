@@ -8,7 +8,10 @@ import {
   Table,
   Columns3,
   Trophy,
-  Sparkles
+  Sparkles,
+  Coins,
+  Cloud,
+  RefreshCw
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -20,7 +23,11 @@ interface NavbarProps {
   onFilterChange: (filters: Partial<FilterState>) => void;
   onOpenAddModal?: () => void;
   onOpenSatkerModal?: () => void;
+  onOpenPaguModal?: () => void;
   totalItems: number;
+  isCloudSynced?: boolean;
+  onSyncNow?: () => void;
+  isSyncing?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -32,8 +39,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   onFilterChange,
   onOpenAddModal,
   onOpenSatkerModal,
+  onOpenPaguModal,
   totalItems,
+  isCloudSynced = true,
+  onSyncNow,
+  isSyncing = false,
 }) => {
+
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl border-b border-amber-200/80 shadow-xs">
       {/* Top Banner & Header */}
@@ -125,6 +137,47 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Kelola Akun Satker</span>
               </button>
             )}
+
+            {/* Manage Pagu DIPA Satker - Exclusively for Admin Keuangan */}
+            {currentRole === 'keuangan' && onOpenPaguModal && (
+              <button
+                type="button"
+                onClick={onOpenPaguModal}
+                className="px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Entry & Atur Pagu DIPA Anggaran Masing-Masing Satker"
+              >
+                <Coins className="h-4 w-4 text-slate-950" />
+                <span>Entry Pagu Satker</span>
+              </button>
+            )}
+
+            {/* Live Cloud Firestore Sync Indicator */}
+            <div 
+              onClick={onSyncNow}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer select-none transition-all shadow-2xs ${
+                isCloudSynced 
+                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100' 
+                  : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+              }`}
+              title="Cloud Firestore Aktif: Seluruh data (permohonan, verifikasi, SPP, pagu DIPA, akun satker) tersimpan otomatis ke Firebase. Klik untuk sinkronkan ulang."
+            >
+              {isSyncing ? (
+                <RefreshCw className="h-3.5 w-3.5 text-emerald-700 animate-spin" />
+              ) : (
+                <span className="relative flex h-2 w-2">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                    isCloudSynced ? 'bg-emerald-400' : 'bg-amber-400'
+                  }`}></span>
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                    isCloudSynced ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}></span>
+                </span>
+              )}
+              <Cloud className={`h-3.5 w-3.5 ${isCloudSynced ? 'text-emerald-700' : 'text-amber-700'}`} />
+              <span className="text-[11px] font-black hidden sm:inline">
+                {isSyncing ? 'Menyinkronkan...' : isCloudSynced ? 'Firebase Cloud' : 'Sinkronisasi'}
+              </span>
+            </div>
 
             {/* Active User Badge */}
             <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-xl border border-slate-200 shadow-2xs">

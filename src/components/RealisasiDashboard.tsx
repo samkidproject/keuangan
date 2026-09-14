@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { SubmissionItem, UserRole } from '../types';
 import { DEFAULT_SATKER_ACCOUNTS } from '../data/defaultSatkers';
+import { getDefaultPaguMap } from '../data/defaultPagu';
 import { formatToWIB } from '../lib/dateUtils';
 import { openAttachmentFile } from '../lib/firestoreService';
 import { 
@@ -19,32 +20,41 @@ import {
   BarChart3,
   ChevronDown,
   ChevronUp,
-  FileText,
-  Clock,
+  Coins,
   AlertCircle,
-  Pencil
+  Pencil,
+  Flame,
+  Award,
+  Zap
 } from 'lucide-react';
 
 interface RealisasiDashboardProps {
   submissions: SubmissionItem[];
   currentRole: UserRole;
   currentUserSatker?: string;
+  paguMap?: Record<string, number>;
+  onOpenAdminPaguModal?: () => void;
+  onOpenEditSatkerPagu?: (satkerName: string) => void;
   onViewDetail?: (item: SubmissionItem) => void;
   onOpenSppModal?: (item: SubmissionItem) => void;
 }
 
 export type RealizationScopeMode = 'spp_all' | 'spp_number_only' | 'approved_auditor_keuangan' | 'all_submissions';
+export type RankingSortMode = 'spp_desc' | 'percent_desc' | 'count_desc' | 'sisa_asc' | 'nominal_desc' | 'name_asc';
 
 export interface SatkerRealizationData {
   satkerName: string;
+  paguAnggaran: number;
   totalPermohonanNominal: number;
   totalPermohonanCount: number;
   totalApprovedNominal: number;
   totalSppNominal: number;
   totalSppCount: number;
-  realizationPercentage: number;
+  sisaPagu: number;
+  realizationPercentage: number; // based on Pagu DIPA
   sppItems: SubmissionItem[];
   allSubmissions: SubmissionItem[];
+  rank?: number;
 }
 
 // Safe parser for nominal values whether string, number, or formatted
@@ -112,6 +122,9 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
   submissions,
   currentRole,
   currentUserSatker,
+  paguMap = {},
+  onOpenAdminPaguModal,
+  onOpenEditSatkerPagu,
   onViewDetail,
   onOpenSppModal,
 }) => {
@@ -119,7 +132,7 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
   const [selectedBidang, setSelectedBidang] = useState<string>('');
   const [scopeMode, setScopeMode] = useState<RealizationScopeMode>('spp_all');
   const [filterSppOnly, setFilterSppOnly] = useState<boolean>(false);
-  const [sortBy, setSortBy] = useState<'spp_desc' | 'spp_asc' | 'nominal_desc' | 'percent_desc' | 'name_asc'>('spp_desc');
+  const [sortBy, setSortBy] = useState<RankingSortMode>('spp_desc');
   const [expandedSatker, setExpandedSatker] = useState<string | null>(null);
   const [copiedReport, setCopiedReport] = useState<boolean>(false);
 
@@ -149,35 +162,25 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
     const isDirekomendasikan = item.status === 'direkomendasikan';
     const hasFinanceTimestamp = Boolean(item.financeProcessedAt && item.financeProcessedAt.trim() !== '');
 
-    switch (scopeMode) {
-      case 'spp_number_only':
-        // Only items that explicitly have an SPP number entered
-        return hasSppNumber || hasSppFile;
-
-      case 'approved_auditor_keuangan':
-        // Items approved by Auditor or Keuangan or with SPP
-        return isDirekomendasikan || isSelesaiKeuangan || hasSppNumber || hasFinanceTimestamp || (parseSafeNumber(item.auditorApprovedNominal) > 0);
-
-      case 'all_submissions':
-        // All submissions
-        return true;
-
-      case 'spp_all':
-      default:
-        // Comprehensive SPP stage: Status selesai keuangan, ada nomor SPP, ada file SPP, ada timestamp keuangan, dsb.
-        return isSelesaiKeuangan || hasSppNumber || hasSppFile || hasSppDate || hasFinanceTimestamp;
+    if (scopeMode === 'spp_number_only') {
+      return hasSppNumber;
     }
+    if (scopeMode === 'approved_auditor_keuangan') {
+      return isSelesaiKeuangan || isDirekomendasikan || hasSppNumber;
+    }
+    if (scopeMode === 'all_submissions') {
+      return true;
+    }
+    // Default 'spp_all': Selesai keuangan atau ada bukti SPP
+    return isSelesaiKeuangan || hasSppNumber || hasSppFile || hasSppDate || hasFinanceTimestamp;
   };
 
-  // Build the list of all standard Satker names in Kejati Lampung
+  // Standard Satker List
   const standardSatkers = useMemo(() => {
-    const list = DEFAULT_SATKER_ACCOUNTS
-      .filter(acc => acc.role === 'satker' || !acc.role || acc.role === undefined)
-      .map(acc => acc.satkerName);
-    
-    // Also include Kejati Lampung & any other satker present in submissions
-    if (!list.includes('Kejati Lampung')) {
-      list.push('Kejati Lampung');
+    const list = DEFAULT_SATKER_ACCOUNTS.map(a => a.satkerName);
+    const kejati = 'Kejati Lampung';
+    if (!list.includes(kejati)) {
+      list.unshift(kejati);
     }
 
     submissions.forEach(s => {
@@ -192,19 +195,26 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
     return Array.from(new Set(list));
   }, [submissions]);
 
-  // Aggregate realization data per Satuan Kerja
+  // Aggregate realization data and merge with Pagu per Satuan Kerja
   const satkerStats = useMemo(() => {
+    const defaultPagu = getDefaultPaguMap();
     const map = new Map<string, SatkerRealizationData>();
 
     // Initialize map for all standard satkers
     standardSatkers.forEach(satkerName => {
+      const assignedPagu = paguMap[satkerName] !== undefined 
+        ? paguMap[satkerName] 
+        : (defaultPagu[satkerName] ?? 0);
+
       map.set(satkerName, {
         satkerName,
+        paguAnggaran: assignedPagu,
         totalPermohonanNominal: 0,
         totalPermohonanCount: 0,
         totalApprovedNominal: 0,
         totalSppNominal: 0,
         totalSppCount: 0,
+        sisaPagu: assignedPagu,
         realizationPercentage: 0,
         sppItems: [],
         allSubmissions: []
@@ -217,13 +227,19 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
       
       let entry = map.get(satkerKey);
       if (!entry) {
+        const assignedPagu = paguMap[satkerKey] !== undefined 
+          ? paguMap[satkerKey] 
+          : (defaultPagu[satkerKey] ?? 0);
+
         entry = {
           satkerName: satkerKey,
+          paguAnggaran: assignedPagu,
           totalPermohonanNominal: 0,
           totalPermohonanCount: 0,
           totalApprovedNominal: 0,
           totalSppNominal: 0,
           totalSppCount: 0,
+          sisaPagu: assignedPagu,
           realizationPercentage: 0,
           sppItems: [],
           allSubmissions: []
@@ -259,53 +275,55 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
       }
     });
 
-    // Calculate percentage
+    // Calculate percentage against Pagu
     const results: SatkerRealizationData[] = [];
     map.forEach(data => {
-      if (data.totalPermohonanNominal > 0) {
-        data.realizationPercentage = Math.round((data.totalSppNominal / data.totalPermohonanNominal) * 100);
+      data.sisaPagu = Math.max(0, data.paguAnggaran - data.totalSppNominal);
+      if (data.paguAnggaran > 0) {
+        data.realizationPercentage = Number(((data.totalSppNominal / data.paguAnggaran) * 100).toFixed(1));
       } else {
-        data.realizationPercentage = data.totalSppNominal > 0 ? 100 : 0;
+        data.realizationPercentage = 0;
       }
       results.push(data);
     });
 
     return results;
-  }, [submissions, standardSatkers, selectedBidang, scopeMode]);
+  }, [submissions, standardSatkers, selectedBidang, scopeMode, paguMap]);
 
   // Overall Totals
   const overallMetrics = useMemo(() => {
+    const totalPaguNominal = satkerStats.reduce((acc, curr) => acc + curr.paguAnggaran, 0);
     const totalSppNominal = satkerStats.reduce((acc, curr) => acc + curr.totalSppNominal, 0);
     const totalPermohonanNominal = satkerStats.reduce((acc, curr) => acc + curr.totalPermohonanNominal, 0);
     const totalApprovedNominal = satkerStats.reduce((acc, curr) => acc + curr.totalApprovedNominal, 0);
     const totalSppCount = satkerStats.reduce((acc, curr) => acc + curr.totalSppCount, 0);
     const totalPermohonanCount = satkerStats.reduce((acc, curr) => acc + curr.totalPermohonanCount, 0);
-    const overallPercentage = totalPermohonanNominal > 0 
-      ? Math.round((totalSppNominal / totalPermohonanNominal) * 100) 
+    const totalSisaPagu = Math.max(0, totalPaguNominal - totalSppNominal);
+    const overallPercentage = totalPaguNominal > 0 
+      ? Number(((totalSppNominal / totalPaguNominal) * 100).toFixed(1))
       : 0;
 
-    // Count how many submissions have physical SPP number
-    const totalWithPhysicalSppNumber = submissions.filter(s => Boolean(s.sppNumber && s.sppNumber.trim() !== '')).length;
-    const totalSelesaiKeuangan = submissions.filter(s => s.status === 'selesai_keuangan').length;
-    const totalDirekomendasikan = submissions.filter(s => s.status === 'direkomendasikan').length;
-
-    // Highest Satker
+    // Highest Satker by Nominal
     const sortedBySpp = [...satkerStats].sort((a, b) => b.totalSppNominal - a.totalSppNominal);
-    const topSatker = sortedBySpp.length > 0 && sortedBySpp[0].totalSppNominal > 0 ? sortedBySpp[0] : null;
+    const topSatkerNominal = sortedBySpp.length > 0 && sortedBySpp[0].totalSppNominal > 0 ? sortedBySpp[0] : null;
+
+    // Highest Satker by % Serapan
+    const sortedByPercent = [...satkerStats].sort((a, b) => b.realizationPercentage - a.realizationPercentage);
+    const topSatkerPercent = sortedByPercent.length > 0 && sortedByPercent[0].realizationPercentage > 0 ? sortedByPercent[0] : null;
 
     return {
+      totalPaguNominal,
       totalSppNominal,
       totalPermohonanNominal,
       totalApprovedNominal,
       totalSppCount,
       totalPermohonanCount,
-      totalWithPhysicalSppNumber,
-      totalSelesaiKeuangan,
-      totalDirekomendasikan,
+      totalSisaPagu,
       overallPercentage,
-      topSatker
+      topSatkerNominal,
+      topSatkerPercent
     };
-  }, [satkerStats, submissions]);
+  }, [satkerStats]);
 
   // Realisasi per Bidang
   const bidangStats = useMemo(() => {
@@ -328,7 +346,7 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
     return Array.from(map.values()).sort((a, b) => b.sppNominal - a.sppNominal);
   }, [submissions, scopeMode]);
 
-  // Filter and sort the satker list
+  // Filter and sort the satker list for the Leaderboard
   const filteredAndSortedSatkers = useMemo(() => {
     const result = satkerStats.filter(s => {
       const matchesSearch = !searchTerm || s.satkerName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -340,14 +358,17 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
       if (sortBy === 'spp_desc') {
         return b.totalSppNominal - a.totalSppNominal;
       }
-      if (sortBy === 'spp_asc') {
-        return a.totalSppNominal - b.totalSppNominal;
+      if (sortBy === 'percent_desc') {
+        return b.realizationPercentage - a.realizationPercentage;
+      }
+      if (sortBy === 'count_desc') {
+        return b.totalSppCount - a.totalSppCount;
+      }
+      if (sortBy === 'sisa_asc') {
+        return a.sisaPagu - b.sisaPagu;
       }
       if (sortBy === 'nominal_desc') {
         return b.totalPermohonanNominal - a.totalPermohonanNominal;
-      }
-      if (sortBy === 'percent_desc') {
-        return b.realizationPercentage - a.realizationPercentage;
       }
       if (sortBy === 'name_asc') {
         return a.satkerName.localeCompare(b.satkerName);
@@ -355,49 +376,118 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
       return 0;
     });
 
-    return result;
+    // Assign dynamic ranks based on current sort
+    return result.map((item, idx) => ({
+      ...item,
+      rank: idx + 1
+    }));
   }, [satkerStats, searchTerm, filterSppOnly, sortBy]);
 
-  // Ranked Top 3 for Podium
+  // Podium Top 3 Satkers (Default to highest realization nominal or percentage depending on active sort)
   const top3Satkers = useMemo(() => {
+    // If user selected percent_desc, top 3 based on percentage; otherwise based on nominal
+    const key = sortBy === 'percent_desc' ? 'realizationPercentage' : 'totalSppNominal';
     const sorted = [...satkerStats]
-      .filter(s => s.totalSppNominal > 0)
-      .sort((a, b) => b.totalSppNominal - a.totalSppNominal);
+      .filter(s => s.totalSppNominal > 0 || s.realizationPercentage > 0)
+      .sort((a, b) => b[key] - a[key]);
+
+    // If fewer than 3 have realization, take highest pagu/submissions
+    if (sorted.length < 3) {
+      const remaining = satkerStats
+        .filter(s => !sorted.some(x => x.satkerName === s.satkerName))
+        .sort((a, b) => b.totalPermohonanNominal - a.totalPermohonanNominal);
+      sorted.push(...remaining.slice(0, 3 - sorted.length));
+    }
+
     return sorted.slice(0, 3);
+  }, [satkerStats, sortBy]);
+
+  // Realisasi mapping for AdminPaguModal
+  const realisasiMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    satkerStats.forEach(s => {
+      map[s.satkerName] = s.totalSppNominal;
+    });
+    return map;
   }, [satkerStats]);
+
+  // User's own satker ranking calculation
+  const currentUserRanking = useMemo(() => {
+    if (!currentUserSatker) return null;
+    const normalizedUserSatker = normalizeSatkerName(currentUserSatker).toLowerCase();
+    const foundIndex = filteredAndSortedSatkers.findIndex(
+      s => normalizeSatkerName(s.satkerName).toLowerCase() === normalizedUserSatker
+    );
+    if (foundIndex === -1) return null;
+    return {
+      rank: foundIndex + 1,
+      totalSatker: filteredAndSortedSatkers.length,
+      data: filteredAndSortedSatkers[foundIndex]
+    };
+  }, [filteredAndSortedSatkers, currentUserSatker]);
 
   // Unique bidang options
   const uniqueBidangs = useMemo(() => {
     return Array.from(new Set(submissions.map(s => s.bidang).filter(Boolean))).sort();
   }, [submissions]);
 
-  // Copy Summary to Clipboard
+  // Copy Summary to Clipboard (Formatted for WhatsApp Leadership Reports)
   const handleCopyReport = () => {
-    const scopeLabel = 
-      scopeMode === 'spp_number_only' ? 'Hanya Dokumen SPP Terbit' :
-      scopeMode === 'approved_auditor_keuangan' ? 'Semua Persetujuan Auditor & Keuangan' :
-      scopeMode === 'all_submissions' ? 'Seluruh Pengajuan Masuk' :
-      'Tahap Selesai Keuangan & Terbit SPP';
-
     const textLines = [
-      `🏆 LAPORAN REALISASI ANGGARAN BA BUN (${scopeLabel.toUpperCase()}) KEJATI LAMPUNG`,
-      `Tanggal: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`,
-      `--------------------------------------------------`,
-      `TOTAL REALISASI: ${formatCurrency(overallMetrics.totalSppNominal)}`,
-      `TOTAL PERMOHONAN: ${formatCurrency(overallMetrics.totalPermohonanNominal)} (${overallMetrics.overallPercentage}%)`,
-      `TOTAL BERKAS REALISASI: ${overallMetrics.totalSppCount} Dokumen`,
-      `--------------------------------------------------`,
-      `PERINGKAT REALISASI SATUAN KERJA:`,
+      `🏆 *KLASEMEN REALISASI ANGGARAN BA BUN SE-WILAYAH KEJATI LAMPUNG* 🏆`,
+      `📅 Tanggal Pembaruan: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+      `----------------------------------------------------`,
+      `💰 *TOTAL PAGU DIPA WILAYAH:* ${formatCurrency(overallMetrics.totalPaguNominal)}`,
+      `💵 *TOTAL REALISASI PENCAIRAN:* ${formatCurrency(overallMetrics.totalSppNominal)} (${overallMetrics.overallPercentage}%)`,
+      `📉 *SISA PAGU ANGGARAN:* ${formatCurrency(overallMetrics.totalSisaPagu)}`,
+      `📑 *TOTAL BERKAS PENCAIRAN:* ${overallMetrics.totalSppCount} Berkas Terbit`,
+      `----------------------------------------------------`,
+      `🥇 *PERINGKAT PENYERAPAN ANGGARAN SATKER:*`,
       ...filteredAndSortedSatkers.map((s, idx) => {
-        return `${idx + 1}. ${s.satkerName}: ${formatCurrency(s.totalSppNominal)} (${s.totalSppCount} Berkas | ${s.realizationPercentage}%)`;
+        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`;
+        return `${medal} *${s.satkerName}*\n   • Realisasi: ${formatCurrency(s.totalSppNominal)} / Pagu: ${formatCurrency(s.paguAnggaran)}\n   • Serapan: *${s.realizationPercentage}%* (${s.totalSppCount} berkas) | Sisa: ${formatCurrency(s.sisaPagu)}`;
       }),
-      `--------------------------------------------------`,
-      `Dihasilkan secara otomatis oleh Portal BA BUN Kejati Lampung`
+      `----------------------------------------------------`,
+      `🚀 *Ayo pacu penyerapan anggaran untuk akselerasi kinerja penegakan hukum dan pelayanan publik!*`,
+      `_Dihasilkan otomatis oleh Portal Terpadu BA BUN Kejati Lampung_`
     ];
 
     navigator.clipboard.writeText(textLines.join('\n'));
     setCopiedReport(true);
     setTimeout(() => setCopiedReport(false), 3000);
+  };
+
+  const getZoneBadge = (percentage: number) => {
+    if (percentage >= 75) {
+      return {
+        label: 'Zona Hijau (Sangat Baik)',
+        color: 'bg-emerald-100 text-emerald-950 border-emerald-300',
+        barColor: 'from-emerald-500 to-teal-600',
+        glow: 'text-emerald-600'
+      };
+    }
+    if (percentage >= 50) {
+      return {
+        label: 'Zona Biru (Optimal)',
+        color: 'bg-blue-100 text-blue-950 border-blue-300',
+        barColor: 'from-blue-500 to-indigo-600',
+        glow: 'text-blue-600'
+      };
+    }
+    if (percentage >= 25) {
+      return {
+        label: 'Zona Kuning (Akselerasi)',
+        color: 'bg-amber-100 text-amber-950 border-amber-300',
+        barColor: 'from-amber-400 to-yellow-600',
+        glow: 'text-amber-600'
+      };
+    }
+    return {
+      label: 'Zona Merah (Perlu Dorongan)',
+      color: 'bg-rose-100 text-rose-950 border-rose-300',
+      barColor: 'from-rose-500 to-red-600',
+      glow: 'text-rose-600'
+    };
   };
 
   const maxRealizationNominal = useMemo(() => {
@@ -419,305 +509,377 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="px-3 py-1 bg-slate-950 text-amber-300 text-xs font-black rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-xs">
                 <Trophy className="h-3.5 w-3.5 text-amber-400" />
-                Dashboard Realisasi Anggaran BA BUN
+                Klasemen & Realisasi Anggaran BA BUN
               </span>
-              <span className="px-2.5 py-0.5 bg-amber-300/90 text-slate-950 text-[11px] font-black rounded-full border border-amber-400">
-                Tahap Disetujui Keuangan & SPP Satker
+              <span className="px-2.5 py-0.5 bg-amber-300/90 text-slate-950 text-[11px] font-black rounded-full border border-amber-400 flex items-center gap-1">
+                <Flame className="h-3 w-3 text-red-600" />
+                Pemacu Kinerja Satker Se-Lampung
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950">
-              Pemantauan & Pemeringkatan Realisasi Anggaran Seluruh Satker
+              Perankingan Penyerapan Anggaran & Realisasi Pagu DIPA
             </h2>
             <p className="text-xs sm:text-sm text-slate-950 font-medium max-w-3xl leading-relaxed">
-              Memvisualisasikan total serapan anggaran yang telah disetujui Pengelola Keuangan dan diterbitkan dokumen SPP per Satuan Kerja se-Wilayah Hukum Kejaksaan Tinggi Lampung secara transparan dan akurat.
+              Pantau serapan anggaran masing-masing Satuan Kerja terhadap Pagu DIPA, ranking satker dengan pencairan terbanyak, serta berpacu bersama untuk mencapai realisasi optimal se-Wilayah Kejaksaan Tinggi Lampung.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-auto shrink-0">
+            {/* Admin Pagu Button - Exclusively for Sub Bagian Keuangan */}
+            {currentRole === 'keuangan' && onOpenAdminPaguModal && (
+              <button
+                type="button"
+                onClick={onOpenAdminPaguModal}
+                className="px-4 py-2.5 bg-slate-950 hover:bg-slate-900 active:scale-95 text-amber-300 font-black rounded-xl text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer border border-amber-400"
+                title="Kelola & Entry Pagu DIPA Satuan Kerja (Sub Bagian Keuangan)"
+              >
+                <Coins className="h-4 w-4 text-amber-400" />
+                <span>Entry Pagu DIPA Satker</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handleCopyReport}
-              className="px-3.5 py-2.5 bg-slate-950 hover:bg-slate-900 text-amber-300 font-black rounded-xl text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
-              title="Salin Ringkasan Laporan Realisasi"
+              className="px-3.5 py-2.5 bg-amber-200/90 hover:bg-amber-100 text-slate-950 font-black rounded-xl text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer active:scale-95 border border-amber-300"
+              title="Salin Ringkasan Laporan Klasemen Realisasi ke WhatsApp"
             >
               {copiedReport ? (
                 <>
-                  <Check className="h-4 w-4 text-emerald-400" />
-                  <span className="text-white">Laporan Disalin!</span>
+                  <Check className="h-4 w-4 text-emerald-800" />
+                  <span className="text-emerald-950">Disalin ke WA!</span>
                 </>
               ) : (
                 <>
-                  <Copy className="h-4 w-4 text-amber-400" />
-                  <span>Salin Ringkasan Laporan</span>
+                  <Copy className="h-4 w-4 text-slate-950" />
+                  <span>Salin Format Laporan WA</span>
                 </>
               )}
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Scope Selector Tabs (Selesai Keuangan & SPP, Hanya Nomor SPP, Disetujui Auditor, Semua) */}
-      <div className="bg-white border-2 border-amber-200/90 rounded-2xl p-3 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-amber-600" />
-              <span>Kategori Hitungan Realisasi:</span>
-            </span>
+        {/* Realization Scope Selector */}
+        <div className="mt-5 pt-4 border-t border-amber-400/50 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-extrabold text-slate-950">Kriteria Hitung Realisasi:</span>
+            <div className="flex items-center gap-1 bg-black/15 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setScopeMode('spp_all')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  scopeMode === 'spp_all' ? 'bg-slate-950 text-amber-300 shadow-xs' : 'text-slate-900 hover:bg-white/20'
+                }`}
+              >
+                Selesai Keuangan & SPP (Standar)
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeMode('spp_number_only')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  scopeMode === 'spp_number_only' ? 'bg-slate-950 text-amber-300 shadow-xs' : 'text-slate-900 hover:bg-white/20'
+                }`}
+              >
+                Fisik SPP Terbit Saja
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeMode('approved_auditor_keuangan')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  scopeMode === 'approved_auditor_keuangan' ? 'bg-slate-950 text-amber-300 shadow-xs' : 'text-slate-900 hover:bg-white/20'
+                }`}
+              >
+                Semua Disetujui
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
-            
-            {/* Tab 1: Selesai Keuangan & SPP (Default) */}
-            <button
-              type="button"
-              onClick={() => setScopeMode('spp_all')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                scopeMode === 'spp_all'
-                  ? 'bg-amber-500 text-slate-950 shadow-xs border border-amber-400'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
-              }`}
-              title="Menghitung semua berkas yang telah disetujui Pengelola Keuangan (Tahap SPP) dan/atau terbit SPP"
-            >
-              <FileCheck2 className="h-3.5 w-3.5" />
-              <span>Selesai Keuangan & SPP</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-200/80 text-slate-950 font-black">
-                {submissions.filter(s => s.status === 'selesai_keuangan' || (s.sppNumber && s.sppNumber.trim() !== '')).length}
-              </span>
-            </button>
-
-            {/* Tab 2: Hanya Nomor SPP Terbit */}
-            <button
-              type="button"
-              onClick={() => setScopeMode('spp_number_only')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                scopeMode === 'spp_number_only'
-                  ? 'bg-emerald-600 text-white shadow-xs border border-emerald-500'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
-              }`}
-              title="Hanya menghitung berkas yang nomor SPP fisiknya telah diisikan oleh Satker"
-            >
-              <FileText className="h-3.5 w-3.5" />
-              <span>Sudah Ada No. SPP</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-100 text-emerald-950 font-black">
-                {overallMetrics.totalWithPhysicalSppNumber}
-              </span>
-            </button>
-
-            {/* Tab 3: Termasuk Rekomendasi Auditor */}
-            <button
-              type="button"
-              onClick={() => setScopeMode('approved_auditor_keuangan')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                scopeMode === 'approved_auditor_keuangan'
-                  ? 'bg-purple-600 text-white shadow-xs border border-purple-500'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
-              }`}
-              title="Menghitung seluruh berkas yang disetujui (Rekomendasi Auditor + Persetujuan Keuangan + SPP)"
-            >
-              <ShieldCheck className="h-3.5 w-3.5" />
-              <span>Disetujui Auditor & Keuangan</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-100 text-purple-950 font-black">
-                {submissions.filter(s => s.status === 'direkomendasikan' || s.status === 'selesai_keuangan' || (s.sppNumber && s.sppNumber.trim() !== '')).length}
-              </span>
-            </button>
-
-            {/* Tab 4: Semua Pengajuan */}
-            <button
-              type="button"
-              onClick={() => setScopeMode('all_submissions')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                scopeMode === 'all_submissions'
-                  ? 'bg-slate-900 text-white shadow-xs border border-slate-800'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
-              }`}
-              title="Menghitung seluruh permohonan yang diajukan Satker"
-            >
-              <span>Semua Permohonan</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-900 font-black">
-                {submissions.length}
-              </span>
-            </button>
-
+          <div className="text-[11px] font-bold text-slate-900 bg-white/30 px-3 py-1 rounded-lg">
+            Total {standardSatkers.length} Satker Se-Wilayah Hukum Lampung
           </div>
         </div>
       </div>
 
-      {/* KPI Highlight Summary Cards */}
+      {/* Motivational Satker Banner (If user is logged in as Satker) */}
+      {currentUserRanking && (
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-amber-950 text-white rounded-2xl p-4.5 border-2 border-amber-400 shadow-md relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="h-12 w-12 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-xl shrink-0 shadow-md">
+              {currentUserRanking.rank === 1 ? '🥇' : currentUserRanking.rank === 2 ? '🥈' : currentUserRanking.rank === 3 ? '🥉' : `#${currentUserRanking.rank}`}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-amber-300 text-xs font-black uppercase tracking-wider">
+                  🏁 Kinerja Satuan Kerja Anda
+                </span>
+                <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-bold rounded-full border border-amber-400/30">
+                  {currentUserRanking.data.satkerName}
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-black mt-0.5">
+                Peringkat #{currentUserRanking.rank} dari {currentUserRanking.totalSatker} Satker se-Lampung
+              </h3>
+              <p className="text-xs text-slate-300 font-medium">
+                Realisasi: <strong className="text-amber-300 font-black">{formatCurrency(currentUserRanking.data.totalSppNominal)}</strong> dari Pagu <strong className="text-slate-200">{formatCurrency(currentUserRanking.data.paguAnggaran)}</strong> ({currentUserRanking.data.realizationPercentage}% Penyerapan)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
+            <div className="text-right hidden sm:block">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Status Serapan:</span>
+              <span className="text-xs font-black text-emerald-400">
+                {currentUserRanking.data.realizationPercentage >= 75 ? '🌟 Zona Hijau (Unggul)' :
+                 currentUserRanking.data.realizationPercentage >= 50 ? '⚡ Zona Biru (Optimal)' :
+                 currentUserRanking.data.realizationPercentage >= 25 ? '⏳ Zona Kuning (Akselerasi)' :
+                 '🚀 Zona Merah (Perlu Pacu)'}
+              </span>
+            </div>
+            <div className="p-2.5 bg-amber-400/20 rounded-xl border border-amber-400/40 text-amber-300">
+              <Zap className="h-5 w-5 animate-pulse" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Overview Metric KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
-        {/* Card 1: Total Realisasi SPP */}
+        {/* Card 1: Total Pagu DIPA Se-Wilayah */}
         <div className="bg-white border-2 border-amber-300/90 rounded-2xl p-4.5 shadow-xs flex flex-col justify-between relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-              Total Realisasi SPP / Disetujui
+              Total Pagu DIPA Wilayah
             </span>
             <div className="p-2 rounded-xl bg-amber-100 text-amber-900 border border-amber-300">
-              <Wallet className="h-5 w-5 text-amber-700" />
+              <Coins className="h-5 w-5 text-amber-700" />
             </div>
           </div>
           <div className="mt-3">
-            <div className="text-xl sm:text-2xl font-black text-amber-950 tracking-tight">
+            <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              {formatCurrency(overallMetrics.totalPaguNominal)}
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 mt-1 font-medium">
+              <span>Sisa Pagu: <strong className="text-amber-900 font-bold">{formatCurrency(overallMetrics.totalSisaPagu)}</strong></span>
+            </div>
+          </div>
+          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+            <span className="text-slate-500">Cakupan:</span>
+            <span className="font-bold text-slate-800">{standardSatkers.length} Satker (Kejati/Kejari/Cabjari)</span>
+          </div>
+        </div>
+
+        {/* Card 2: Total Realisasi Pencairan */}
+        <div className="bg-white border-2 border-emerald-300 rounded-2xl p-4.5 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+              Total Realisasi Pencairan
+            </span>
+            <div className="p-2 rounded-xl bg-emerald-100 text-emerald-900 border border-emerald-300">
+              <Wallet className="h-5 w-5 text-emerald-700" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-xl sm:text-2xl font-black text-emerald-800 tracking-tight">
               {formatCurrency(overallMetrics.totalSppNominal)}
             </div>
             <div className="flex items-center gap-1.5 text-xs text-slate-600 mt-1 font-medium">
               <FileCheck2 className="h-3.5 w-3.5 text-emerald-600" />
-              <span><strong>{overallMetrics.totalSppCount}</strong> Berkas Realisasi Disetujui</span>
+              <span><strong>{overallMetrics.totalSppCount}</strong> Berkas Terbit Realisasi</span>
             </div>
           </div>
           <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
-            <span className="text-slate-500">Total Permohonan:</span>
-            <span className="font-bold text-slate-800">{formatCurrency(overallMetrics.totalPermohonanNominal)}</span>
+            <span className="text-slate-500">Tingkat Penyerapan:</span>
+            <span className="font-black text-emerald-700">{overallMetrics.overallPercentage}% dari Total Pagu</span>
           </div>
         </div>
 
-        {/* Card 2: Satker Juara 1 Realisasi */}
+        {/* Card 3: Juara 1 Pencairan Nominal */}
         <div className="bg-white border-2 border-yellow-400/90 rounded-2xl p-4.5 shadow-xs flex flex-col justify-between relative overflow-hidden bg-gradient-to-b from-yellow-50/50 to-white">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-yellow-950">
-              Realisasi Tertinggi #1 🏆
+              Juara Nominal Terbanyak 🏆
             </span>
             <div className="p-2 rounded-xl bg-yellow-400 text-slate-950 shadow-2xs">
               <Trophy className="h-5 w-5 text-slate-950" />
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-sm font-black text-slate-900 line-clamp-1" title={overallMetrics.topSatker?.satkerName || '-'}>
-              {overallMetrics.topSatker ? overallMetrics.topSatker.satkerName : 'Belum Ada Realisasi'}
+            <div className="text-sm font-black text-slate-900 line-clamp-1" title={overallMetrics.topSatkerNominal?.satkerName || '-'}>
+              {overallMetrics.topSatkerNominal ? overallMetrics.topSatkerNominal.satkerName : 'Belum Ada Realisasi'}
             </div>
             <div className="text-lg font-black text-amber-900 tracking-tight mt-1">
-              {overallMetrics.topSatker ? formatCurrency(overallMetrics.topSatker.totalSppNominal) : 'Rp 0'}
+              {overallMetrics.topSatkerNominal ? formatCurrency(overallMetrics.topSatkerNominal.totalSppNominal) : 'Rp 0'}
             </div>
           </div>
           <div className="mt-3 pt-2.5 border-t border-yellow-200 flex items-center justify-between text-[11px]">
-            <span className="text-yellow-900 font-bold">Serapan:</span>
+            <span className="text-yellow-900 font-bold">Penyerapan:</span>
             <span className="font-black text-emerald-700">
-              {overallMetrics.topSatker ? `${overallMetrics.topSatker.realizationPercentage}% (${overallMetrics.topSatker.totalSppCount} Berkas)` : '0%'}
+              {overallMetrics.topSatkerNominal ? `${overallMetrics.topSatkerNominal.realizationPercentage}% (${overallMetrics.topSatkerNominal.totalSppCount} Berkas)` : '0%'}
             </span>
           </div>
         </div>
 
-        {/* Card 3: Tingkat Serapan Persentase */}
-        <div className="bg-white border-2 border-emerald-300 rounded-2xl p-4.5 shadow-xs flex flex-col justify-between">
+        {/* Card 4: Pemuncak Persentase Penyerapan */}
+        <div className="bg-white border-2 border-purple-300 rounded-2xl p-4.5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-              % Serapan Realisasi
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-purple-950">
+              Serapan Tertinggi (%) ⚡
             </span>
-            <div className="p-2 rounded-xl bg-emerald-100 text-emerald-900 border border-emerald-300">
-              <TrendingUp className="h-5 w-5 text-emerald-700" />
+            <div className="p-2 rounded-xl bg-purple-100 text-purple-900 border border-purple-300">
+              <TrendingUp className="h-5 w-5 text-purple-700" />
             </div>
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-emerald-700 tracking-tight">
-              {overallMetrics.overallPercentage}%
+          <div className="mt-2">
+            <div className="text-sm font-black text-slate-900 line-clamp-1" title={overallMetrics.topSatkerPercent?.satkerName || '-'}>
+              {overallMetrics.topSatkerPercent ? overallMetrics.topSatkerPercent.satkerName : 'Belum Ada Realisasi'}
             </div>
-            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2 border border-slate-200">
-              <div 
-                className="bg-emerald-600 h-full rounded-full transition-all duration-700"
-                style={{ width: `${Math.min(overallMetrics.overallPercentage, 100)}%` }}
-              ></div>
+            <div className="text-lg font-black text-purple-900 tracking-tight mt-1">
+              {overallMetrics.topSatkerPercent ? `${overallMetrics.topSatkerPercent.realizationPercentage}% Pagu Terpakai` : '0%'}
             </div>
           </div>
-          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
-            <span className="text-slate-500">Efektivitas:</span>
-            <span className="font-bold text-emerald-800">
-              {overallMetrics.totalSppCount} dari {overallMetrics.totalPermohonanCount} Pengajuan Realisasi
-            </span>
-          </div>
-        </div>
-
-        {/* Card 4: Total Satker & Wilayah */}
-        <div className="bg-white border-2 border-blue-300 rounded-2xl p-4.5 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-              Cakupan Satker Wilayah
-            </span>
-            <div className="p-2 rounded-xl bg-blue-100 text-blue-900 border border-blue-300">
-              <Building2 className="h-5 w-5 text-blue-700" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              {standardSatkers.length} Satuan Kerja
-            </div>
-            <div className="text-xs text-slate-600 mt-1 font-medium">
-              Kejati, Kejari & Cabjari se-Lampung
-            </div>
-          </div>
-          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
-            <span className="text-slate-500">Satker Ada Realisasi:</span>
-            <span className="font-black text-blue-950">
-              {satkerStats.filter(s => s.totalSppNominal > 0).length} Satker
+          <div className="mt-3 pt-2.5 border-t border-purple-100 flex items-center justify-between text-[11px]">
+            <span className="text-slate-500">Nominal:</span>
+            <span className="font-bold text-purple-950">
+              {overallMetrics.topSatkerPercent ? formatCurrency(overallMetrics.topSatkerPercent.totalSppNominal) : 'Rp 0'}
             </span>
           </div>
         </div>
 
       </div>
 
-      {/* Top 3 Podium Cards */}
+      {/* Top 3 Podium Cards (Visual Gamification & Motivation) */}
       {top3Satkers.length > 0 && (
-        <div className="bg-white border border-amber-200/90 rounded-3xl p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-amber-100 pb-3">
+        <div className="bg-gradient-to-b from-white via-amber-50/20 to-white border border-amber-300 rounded-3xl p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-amber-200 pb-3 flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-amber-400 text-slate-950 font-black">
-                <Trophy className="h-4 w-4" />
+                <Award className="h-4 w-4" />
               </div>
-              <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                Top 3 Satuan Kerja Realisasi Anggaran Tertinggi
-              </h3>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                  Podium Top 3 Satker Pemimpin Realisasi
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  {sortBy === 'percent_desc' ? 'Berdasarkan Persentase Serapan Pagu DIPA Tertinggi' : 'Berdasarkan Total Nominal Pencairan Terbanyak'}
+                </p>
+              </div>
             </div>
-            <span className="text-xs font-bold text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300">
-              🏆 Leaderboard Realisasi
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-amber-950 bg-amber-200 px-3 py-1 rounded-full border border-amber-300 flex items-center gap-1">
+                <Sparkles className="h-3.5 w-3.5 text-amber-800" />
+                <span>Leaderboard Utama 🏆</span>
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {top3Satkers.map((satker, idx) => {
               const medals = [
-                { title: 'Juara 1', color: 'from-amber-400 to-yellow-500', text: 'text-amber-950', badgeBg: 'bg-amber-400 text-slate-950', border: 'border-amber-400', icon: '🥇' },
-                { title: 'Juara 2', color: 'from-slate-200 to-slate-300', text: 'text-slate-900', badgeBg: 'bg-slate-300 text-slate-950', border: 'border-slate-300', icon: '🥈' },
-                { title: 'Juara 3', color: 'from-amber-600/30 to-amber-700/40', text: 'text-amber-900', badgeBg: 'bg-amber-200 text-amber-950', border: 'border-amber-300', icon: '🥉' }
+                { 
+                  title: 'Juara 1 - Emas', 
+                  color: 'from-amber-400 to-yellow-500', 
+                  badgeBg: 'bg-amber-400 text-slate-950', 
+                  border: 'border-amber-400 ring-2 ring-amber-300', 
+                  icon: '🥇',
+                  roleBadge: '👑 Pemuncak Klasemen'
+                },
+                { 
+                  title: 'Juara 2 - Perak', 
+                  color: 'from-slate-200 to-slate-300', 
+                  badgeBg: 'bg-slate-300 text-slate-950', 
+                  border: 'border-slate-300', 
+                  icon: '🥈',
+                  roleBadge: '🥈 Runner Up'
+                },
+                { 
+                  title: 'Juara 3 - Perunggu', 
+                  color: 'from-amber-600/30 to-amber-700/40', 
+                  badgeBg: 'bg-amber-200 text-amber-950', 
+                  border: 'border-amber-300', 
+                  icon: '🥉',
+                  roleBadge: '🥉 Posisi 3'
+                }
               ];
               const medal = medals[idx] || medals[2];
               const isCurrentUser = currentUserSatker && normalizeSatkerName(satker.satkerName).toLowerCase() === normalizeSatkerName(currentUserSatker).toLowerCase();
+              const zone = getZoneBadge(satker.realizationPercentage);
 
               return (
                 <div 
                   key={satker.satkerName}
-                  className={`relative p-4 rounded-2xl border-2 ${medal.border} bg-gradient-to-b from-white to-amber-50/40 shadow-xs flex flex-col justify-between ${
+                  className={`relative p-4 rounded-2xl border-2 ${medal.border} bg-white shadow-xs flex flex-col justify-between transition-all hover:scale-[1.01] ${
                     isCurrentUser ? 'ring-2 ring-amber-500 ring-offset-2' : ''
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">{medal.icon}</span>
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-3xl">{medal.icon}</span>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${medal.badgeBg}`}>
+                              Peringkat #{idx + 1}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-500">
+                              {medal.roleBadge}
+                            </span>
+                          </div>
+                          <h4 className="font-black text-xs sm:text-sm text-slate-900 mt-1 leading-snug">
+                            {satker.satkerName}
+                          </h4>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
                       <div>
-                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${medal.badgeBg} inline-block`}>
-                          Peringkat #{idx + 1}
+                        <span className="text-[10px] font-bold text-slate-500 block">Total Realisasi Pencairan:</span>
+                        <span className="text-base sm:text-lg font-black text-amber-950 block">
+                          {formatCurrency(satker.totalSppNominal)}
                         </span>
-                        <h4 className="font-black text-xs sm:text-sm text-slate-900 mt-1 leading-snug">
-                          {satker.satkerName}
-                        </h4>
+                      </div>
+
+                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-[11px] space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Pagu DIPA:</span>
+                          <span className="font-extrabold text-slate-800">{formatCurrency(satker.paguAnggaran)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Sisa Pagu:</span>
+                          <span className="font-bold text-slate-600">{formatCurrency(satker.sisaPagu)}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-bold text-slate-700">Persentase Serapan:</span>
+                          <span className="font-black text-emerald-800 text-xs">
+                            {satker.realizationPercentage}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200">
+                          <div 
+                            className={`h-full bg-gradient-to-r ${zone.barColor} rounded-full`}
+                            style={{ width: `${Math.min(satker.realizationPercentage, 100)}%` }}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-amber-100">
-                    <span className="text-[10px] font-bold text-slate-500 block">Total Nominal Realisasi:</span>
-                    <span className="text-base sm:text-lg font-black text-amber-950 block">
-                      {formatCurrency(satker.totalSppNominal)}
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${zone.color}`}>
+                      {zone.label}
                     </span>
-                    <div className="flex items-center justify-between text-[11px] text-slate-600 mt-1.5">
-                      <span>Jumlah: <strong>{satker.totalSppCount} berkas</strong></span>
-                      <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        {satker.realizationPercentage}% Serapan
-                      </span>
-                    </div>
+                    <span className="text-[10px] font-bold text-slate-500">
+                      {satker.totalSppCount} Berkas Terbit
+                    </span>
                   </div>
 
                   {isCurrentUser && (
-                    <div className="mt-2 text-center bg-amber-500 text-slate-950 font-black text-[10px] py-0.5 rounded-md">
-                      Satker Anda ⭐
+                    <div className="mt-2 text-center bg-amber-500 text-slate-950 font-black text-[10px] py-1 rounded-md">
+                      Satuan Kerja Anda ⭐
                     </div>
                   )}
                 </div>
@@ -729,7 +891,7 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
 
       {/* Realisasi Breakdown per Bidang */}
       <div className="bg-white border border-amber-200/80 rounded-2xl p-5 shadow-xs">
-        <div className="flex items-center justify-between mb-3.5">
+        <div className="flex items-center justify-between mb-3.5 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-amber-700" />
             <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wider">
@@ -737,7 +899,7 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
             </h3>
           </div>
           <span className="text-[11px] font-bold text-slate-500">
-            {bidangStats.length} Bidang Terdaftar
+            {bidangStats.length} Bidang Terdaftar (Klik bidang untuk filter)
           </span>
         </div>
 
@@ -791,7 +953,7 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
             <select
               value={selectedBidang}
               onChange={(e) => setSelectedBidang(e.target.value)}
-              className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
             >
               <option value="">Semua Bidang</option>
               {uniqueBidangs.map(b => (
@@ -818,22 +980,36 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
               <ArrowUpDown className="h-3.5 w-3.5 text-slate-500" />
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                onChange={(e) => setSortBy(e.target.value as RankingSortMode)}
                 className="bg-transparent text-xs text-slate-800 font-bold focus:outline-none cursor-pointer py-1"
               >
-                <option value="spp_desc">Realisasi Nominal Tertinggi (Default)</option>
-                <option value="spp_asc">Realisasi Nominal Terendah</option>
-                <option value="nominal_desc">Total Permohonan Tertinggi</option>
-                <option value="percent_desc">% Serapan Tertinggi</option>
+                <option value="spp_desc">Paling Banyak Pencairan (Nominal Rp)</option>
+                <option value="percent_desc">Tertinggi % Penyerapan Pagu DIPA</option>
+                <option value="count_desc">Terbanyak Berkas Selesai</option>
+                <option value="sisa_asc">Sisa Pagu Terkecil</option>
+                <option value="nominal_desc">Total Nilai Permohonan</option>
                 <option value="name_asc">Nama Satker (A-Z)</option>
               </select>
             </div>
+
+            {/* Admin Pagu Quick Action - Exclusively for Sub Bagian Keuangan */}
+            {currentRole === 'keuangan' && onOpenAdminPaguModal && (
+              <button
+                type="button"
+                onClick={onOpenAdminPaguModal}
+                className="px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold rounded-xl text-xs border border-amber-300 flex items-center gap-1.5 cursor-pointer"
+                title="Buka Pengaturan Pagu Satker"
+              >
+                <Coins className="h-3.5 w-3.5 text-amber-700" />
+                <span>Atur Pagu</span>
+              </button>
+            )}
 
           </div>
 
         </div>
 
-        {/* Satker List / Table */}
+        {/* Klasemen Satker List / Table */}
         <div className="space-y-3">
           {filteredAndSortedSatkers.length === 0 ? (
             <div className="text-center py-12 text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
@@ -845,7 +1021,7 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
               const isCurrentUser = currentUserSatker && normalizeSatkerName(satker.satkerName).toLowerCase() === normalizeSatkerName(currentUserSatker).toLowerCase();
               const isExpanded = expandedSatker === satker.satkerName;
               const hasAnySpp = satker.totalSppNominal > 0;
-              const barWidth = maxRealizationNominal > 0 ? (satker.totalSppNominal / maxRealizationNominal) * 100 : 0;
+              const zone = getZoneBadge(satker.realizationPercentage);
 
               return (
                 <div 
@@ -855,7 +1031,7 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
                       ? 'bg-amber-50/70 border-amber-400 ring-2 ring-amber-400/60 shadow-xs' 
                       : hasAnySpp
                       ? 'bg-white border-slate-200 hover:border-amber-300 hover:shadow-xs'
-                      : 'bg-slate-50/80 border-slate-200 opacity-80'
+                      : 'bg-slate-50/80 border-slate-200 opacity-90'
                   }`}
                 >
                   {/* Satker Card Header */}
@@ -863,7 +1039,7 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
                     
                     {/* Rank & Satker Identity */}
                     <div className="flex items-center gap-3.5 min-w-[280px]">
-                      <div className={`h-9 w-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-2xs ${
+                      <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 shadow-2xs ${
                         index === 0 && hasAnySpp
                           ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
                           : index === 1 && hasAnySpp
@@ -885,6 +1061,9 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
                               Satker Anda ⭐
                             </span>
                           )}
+                          <span className={`px-2 py-0.2 rounded text-[10px] font-bold border ${zone.color}`}>
+                            {zone.label}
+                          </span>
                         </div>
                         <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-0.5 flex-wrap">
                           <span>Permohonan: <strong>{formatCurrency(satker.totalPermohonanNominal)}</strong> ({satker.totalPermohonanCount} berkas)</span>
@@ -898,28 +1077,62 @@ export const RealisasiDashboard: React.FC<RealisasiDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Progress Bar & Realization Stats */}
-                    <div className="flex-1 max-w-md space-y-1.5">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="font-bold text-slate-600">Realisasi Nominal:</span>
-                        <span className="font-black text-amber-950 text-xs">
+                    {/* Pagu, Realisasi & Sisa Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4 text-[11px] bg-slate-50/90 p-2.5 rounded-xl border border-slate-200">
+                      <div>
+                        <div className="flex items-center gap-1 text-slate-500">
+                          <span>Pagu DIPA:</span>
+                          {currentRole === 'keuangan' && onOpenAdminPaguModal && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenAdminPaguModal()}
+                              className="text-amber-700 hover:text-amber-950 cursor-pointer"
+                              title="Edit Pagu Satker"
+                            >
+                              <Pencil className="h-2.5 w-2.5" />
+                            </button>
+                          )}
+                        </div>
+                        <span className="font-extrabold text-slate-900 block text-xs">
+                          {formatCurrency(satker.paguAnggaran)}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-slate-500 block">Realisasi Pencairan:</span>
+                        <span className="font-black text-amber-950 block text-xs">
                           {formatCurrency(satker.totalSppNominal)}
                         </span>
                       </div>
+
+                      <div className="col-span-2 sm:col-span-1">
+                        <span className="text-slate-500 block">Sisa Anggaran:</span>
+                        <span className="font-bold text-slate-700 block text-xs">
+                          {formatCurrency(satker.sisaPagu)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar & Penyerapan % */}
+                    <div className="w-full lg:w-48 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-slate-600">Penyerapan:</span>
+                        <span className="font-black text-slate-950 text-xs">
+                          {satker.realizationPercentage}%
+                        </span>
+                      </div>
                       
-                      {/* Visual Progress Bar against highest satker */}
+                      {/* Visual Progress Bar against Pagu */}
                       <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden border border-slate-200 flex">
                         <div 
-                          className={`h-full transition-all duration-500 rounded-full ${
-                            hasAnySpp ? 'bg-gradient-to-r from-amber-400 to-amber-600' : 'bg-slate-200'
-                          }`}
-                          style={{ width: `${Math.max(barWidth, hasAnySpp ? 4 : 0)}%` }}
-                        ></div>
+                          className={`h-full transition-all duration-500 rounded-full bg-gradient-to-r ${zone.barColor}`}
+                          style={{ width: `${Math.min(satker.realizationPercentage, 100)}%` }}
+                        />
                       </div>
 
                       <div className="flex items-center justify-between text-[10px] text-slate-500 font-medium">
-                        <span>Serapan: <strong className={hasAnySpp ? 'text-emerald-700 font-extrabold' : 'text-slate-400'}>{satker.realizationPercentage}%</strong></span>
                         <span>{satker.totalSppCount} berkas realisasi</span>
+                        <span className="font-semibold text-slate-400">Target 100%</span>
                       </div>
                     </div>
 

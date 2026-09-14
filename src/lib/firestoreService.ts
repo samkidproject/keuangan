@@ -9,10 +9,12 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { SubmissionItem, SatkerAccount } from '../types';
+import { SubmissionItem, SatkerAccount, SatkerPagu } from '../types';
 
 const SUBMISSIONS_COLLECTION = 'submissions';
 const ACCOUNTS_COLLECTION = 'satker_accounts';
+const PAGU_COLLECTION = 'satker_pagu';
+const PAGU_LOCAL_STORAGE_KEY = 'ba_bun_satker_pagu_v2_cache';
 
 export enum OperationType {
   CREATE = 'create',
@@ -175,6 +177,189 @@ export async function deleteSatkerAccountFromFirestore(accountId: string) {
   } catch (err) {
     console.error('Failed to delete account from Firestore:', err);
     handleFirestoreError(err, OperationType.DELETE, ACCOUNTS_COLLECTION);
+  }
+}
+
+// -------------------------------------------------------------
+// Satker Pagu (DIPA Budget) Firestore Integration
+// -------------------------------------------------------------
+
+export function getLocalCachedPagu(): Record<string, number> {
+  try {
+    // Purge legacy v1 cache that might contain non-zero mock defaults
+    if (typeof window !== 'undefined' && window.localStorage) {
+      if (localStorage.getItem('ba_bun_satker_pagu_cache')) {
+        localStorage.removeItem('ba_bun_satker_pagu_cache');
+      }
+    }
+    const raw = localStorage.getItem(PAGU_LOCAL_STORAGE_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn('Failed to read pagu cache from localStorage:', e);
+  }
+  return {};
+}
+
+export function saveLocalCachedPagu(map: Record<string, number>) {
+  try {
+    localStorage.setItem(PAGU_LOCAL_STORAGE_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.warn('Failed to write pagu cache to localStorage:', e);
+  }
+}
+
+// Subscribe to real-time Satker Pagu from Firestore
+export function subscribeToSatkerPagu(
+  onData: (paguMap: Record<string, number>, paguList: SatkerPagu[]) => void,
+  onError?: (err: Error) => void
+) {
+  const colRef = collection(db, PAGU_COLLECTION);
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const paguMap: Record<string, number> = {};
+      const paguList: SatkerPagu[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as SatkerPagu;
+        if (data && data.satkerName && typeof data.paguAnggaran === 'number') {
+          paguMap[data.satkerName] = data.paguAnggaran;
+          paguList.push({
+            ...data,
+            id: docSnap.id
+          });
+        }
+      });
+
+      if (snapshot.empty) {
+        // Automatically seed default DIPA pagu for all 17 Satkers into Firestore
+        import('../data/defaultPagu').then(({ DEFAULT_SATKER_PAGU }) => {
+          const items = DEFAULT_SATKER_PAGU.map(p => ({
+            satkerName: p.satkerName,
+            paguAnggaran: p.paguAnggaran,
+            keterangan: p.keterangan
+          }));
+          saveBatchSatkerPaguToFirestore(items, 'Sistem Auto-Seed').catch(err => {
+            console.warn('Auto-seed pagu in Firestore notice:', err);
+          });
+        });
+      }
+
+      // Update local storage cache
+      if (Object.keys(paguMap).length > 0) {
+        saveLocalCachedPagu(paguMap);
+      }
+      onData(paguMap, paguList);
+    },
+    (err) => {
+      console.warn('Firestore pagu subscription error, using local fallback:', err);
+      const customErr = handleFirestoreError(err, OperationType.LIST, PAGU_COLLECTION);
+      if (onError) onError(customErr);
+    }
+  );
+}
+
+// Master sync function to ensure all app state is persisted in Firestore
+export async function syncEntireAppStateToFirestore(
+  submissions: SubmissionItem[],
+  accounts: SatkerAccount[],
+  paguMap: Record<string, number>
+): Promise<{ submissionsSynced: number; accountsSynced: number; paguSynced: number }> {
+  let subCount = 0;
+  let accCount = 0;
+  let paguCount = 0;
+
+  // 1. Sync submissions
+  if (submissions && submissions.length > 0) {
+    await syncLocalSubmissionsToFirestore(submissions);
+    subCount = submissions.length;
+  }
+
+  // 2. Sync accounts
+  if (accounts && accounts.length > 0) {
+    await saveAllSatkerAccountsToFirestore(accounts);
+    accCount = accounts.length;
+  }
+
+  // 3. Sync pagu
+  if (paguMap && Object.keys(paguMap).length > 0) {
+    const paguItems = Object.entries(paguMap).map(([satkerName, paguAnggaran]) => ({
+      satkerName,
+      paguAnggaran
+    }));
+    await saveBatchSatkerPaguToFirestore(paguItems, 'Sinkronisasi Menyeluruh');
+    paguCount = paguItems.length;
+  }
+
+  console.log(`[Firebase Sync] Selesai menyinkronkan: ${subCount} pengajuan, ${accCount} akun, ${paguCount} pagu.`);
+  return { submissionsSynced: subCount, accountsSynced: accCount, paguSynced: paguCount };
+}
+
+// Save single Satker Pagu to Firestore
+export async function saveSatkerPaguToFirestore(
+  satkerName: string,
+  paguAnggaran: number,
+  keterangan?: string,
+  updatedBy?: string
+): Promise<void> {
+  try {
+    const docId = satkerName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    const docRef = doc(db, PAGU_COLLECTION, docId);
+    const payload: SatkerPagu = {
+      satkerName,
+      paguAnggaran,
+      tahunAnggaran: 2026,
+      keterangan: keterangan || `Pagu DIPA ${satkerName} TA 2026`,
+      updatedAt: new Date().toISOString(),
+      updatedBy: updatedBy || 'Admin Keuangan'
+    };
+    await setDoc(docRef, cleanForFirestore(payload), { merge: true });
+
+    // Update local cache
+    const currentCache = getLocalCachedPagu();
+    currentCache[satkerName] = paguAnggaran;
+    saveLocalCachedPagu(currentCache);
+  } catch (err) {
+    console.error('Failed to save Satker Pagu to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, PAGU_COLLECTION);
+    throw err;
+  }
+}
+
+// Batch save multiple Satker Pagu to Firestore
+export async function saveBatchSatkerPaguToFirestore(
+  paguItems: Array<{ satkerName: string; paguAnggaran: number; keterangan?: string }>,
+  updatedBy?: string
+): Promise<void> {
+  try {
+    const batch = writeBatch(db);
+    const now = new Date().toISOString();
+    const updatedCache = getLocalCachedPagu();
+
+    for (const item of paguItems) {
+      if (!item.satkerName) continue;
+      const docId = item.satkerName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+      const docRef = doc(db, PAGU_COLLECTION, docId);
+      const payload: SatkerPagu = {
+        satkerName: item.satkerName,
+        paguAnggaran: item.paguAnggaran,
+        tahunAnggaran: 2026,
+        keterangan: item.keterangan || `Pagu DIPA ${item.satkerName} TA 2026`,
+        updatedAt: now,
+        updatedBy: updatedBy || 'Admin Keuangan'
+      };
+      batch.set(docRef, cleanForFirestore(payload), { merge: true });
+      updatedCache[item.satkerName] = item.paguAnggaran;
+    }
+
+    await batch.commit();
+    saveLocalCachedPagu(updatedCache);
+    console.log(`Successfully batch saved ${paguItems.length} Satker Pagu to Firestore.`);
+  } catch (err) {
+    console.error('Failed to batch save Satker Pagu to Firestore:', err);
+    handleFirestoreError(err, OperationType.WRITE, PAGU_COLLECTION);
+    throw err;
   }
 }
 

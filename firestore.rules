@@ -1,14 +1,28 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Pengajuan BA BUN Submissions & Large File Chunks
     match /submissions/{submissionId} {
       allow read, write: if true;
+      match /{allSubcollections=**} {
+        allow read, write: if true;
+      }
     }
+    
+    // Satker & Pengelola User Accounts
     match /satker_accounts/{accountId} {
       allow read, write: if true;
     }
+    
+    // Pagu DIPA Anggaran Per Satker
+    match /satker_pagu/{paguId} {
+      allow read, write: if true;
+    }
+    
+    // Global fallback for verification test and system logs
     match /{document=**} {
       allow read, write: if true;
     }
   }
 }
+

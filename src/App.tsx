@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { SubmissionItem, UserRole, FilterState, VerificationStatus, AuditChecklist, SatkerAccount } from './types';
 import { INITIAL_SUBMISSIONS } from './data/initialData';
 import { 
@@ -7,11 +7,16 @@ import {
   saveSubmissionToFirestore,
   deleteSubmissionFromFirestore,
   cleanLegacyDemoItems,
-  subscribeToSatkerAccounts,
+  subscribeToSatkerAccounts, 
   saveSatkerAccountToFirestore,
   saveAllSatkerAccountsToFirestore,
   deleteSatkerAccountFromFirestore,
-  syncLocalSubmissionsToFirestore
+  syncLocalSubmissionsToFirestore,
+  subscribeToSatkerPagu,
+  saveSatkerPaguToFirestore,
+  saveBatchSatkerPaguToFirestore,
+  syncEntireAppStateToFirestore,
+  getLocalCachedPagu
 } from './lib/firestoreService';
 import { LoginScreen } from './components/LoginScreen';
 import { Navbar } from './components/Navbar';
@@ -28,9 +33,11 @@ import { EditSubmissionModal } from './components/EditSubmissionModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { SamkidPromoModal } from './components/SamkidPromoModal';
 import { RealisasiDashboard } from './components/RealisasiDashboard';
+import { AdminPaguModal } from './components/AdminPaguModal';
 import { getWIBTimestamp } from './lib/dateUtils';
 
 import { DEFAULT_SATKER_ACCOUNTS } from './data/defaultSatkers';
+import { getDefaultPaguMap } from './data/defaultPagu';
 
 const LOCAL_STORAGE_KEY = 'ba_bun_firebase_submissions_v2';
 const LOCAL_STORAGE_ACCOUNTS_KEY = 'ba_bun_satker_accounts_v1';
@@ -145,8 +152,15 @@ export default function App() {
   const [deleteModalItem, setDeleteModalItem] = useState<SubmissionItem | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isSatkerModalOpen, setIsSatkerModalOpen] = useState<boolean>(false);
+  const [isAdminPaguModalOpen, setIsAdminPaguModalOpen] = useState<boolean>(false);
   const [isPromoOpen, setIsPromoOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Satker Pagu Map State (Budget Ceilings)
+  const [paguMap, setPaguMap] = useState<Record<string, number>>(() => ({
+    ...getDefaultPaguMap(),
+    ...getLocalCachedPagu()
+  }));
 
   // Firestore Error Banner State
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
@@ -293,9 +307,25 @@ export default function App() {
       }
     );
 
+    const unsubscribePagu = subscribeToSatkerPagu(
+      (incomingMap) => {
+        if (incomingMap && Object.keys(incomingMap).length > 0) {
+          setPaguMap(prev => ({
+            ...getDefaultPaguMap(),
+            ...prev,
+            ...incomingMap
+          }));
+        }
+      },
+      (err) => {
+        console.warn('Firestore pagu listener error:', err);
+      }
+    );
+
     return () => {
       unsubscribeSubmissions();
       unsubscribeAccounts();
+      unsubscribePagu();
     };
   }, []);
 
@@ -770,6 +800,23 @@ export default function App() {
     }
   };
 
+  // Satker Pagu Handlers (Admin Keuangan & Real-time Sync)
+  const handleSaveBatchPagu = async (items: Array<{ satkerName: string; paguAnggaran: number; keterangan?: string }>) => {
+    await saveBatchSatkerPaguToFirestore(items, currentRole === 'satker' ? satkerName : 'Admin Keuangan');
+    setPaguMap(prev => {
+      const next = { ...prev };
+      items.forEach(it => { next[it.satkerName] = it.paguAnggaran; });
+      return next;
+    });
+    showToast(`Pagu DIPA ${items.length} Satker berhasil disimpan ke Firebase!`);
+  };
+
+  const handleSaveSinglePagu = async (sName: string, amount: number) => {
+    await saveSatkerPaguToFirestore(sName, amount, undefined, currentRole === 'satker' ? satkerName : 'Admin Keuangan');
+    setPaguMap(prev => ({ ...prev, [sName]: amount }));
+    showToast(`Pagu DIPA untuk ${sName} berhasil disimpan ke Firebase!`);
+  };
+
   // Submissions Data Isolation:
   // User Satker logged in ONLY sees their own Satker's submissions.
   // Internal Kejati roles (verifikator, keuangan, auditor) see all submissions.
@@ -788,6 +835,22 @@ export default function App() {
 
   const handleFilterChange = (part: Partial<FilterState>) => {
     setFilters(prev => ({ ...prev, ...part }));
+  };
+
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await syncEntireAppStateToFirestore(submissions, satkerAccounts, paguMap);
+      showToast(`✓ Sinkronisasi Cloud selesai: ${res.submissionsSynced} permohonan, ${res.accountsSynced} akun, ${res.paguSynced} pagu.`);
+      setFirestoreError(null);
+    } catch (e: any) {
+      console.error('Manual sync error:', e);
+      showToast(`Sinkronisasi disimpan lokal: ${e?.message || 'Koneksi cloud sedang disesuaikan'}`);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   if (!isLoggedIn) {
@@ -824,37 +887,47 @@ export default function App() {
         onFilterChange={handleFilterChange}
         onOpenAddModal={() => setIsAddModalOpen(true)}
         onOpenSatkerModal={() => setIsSatkerModalOpen(true)}
+        onOpenPaguModal={currentRole === 'keuangan' ? () => setIsAdminPaguModalOpen(true) : undefined}
         totalItems={visibleSubmissions.length}
+        isCloudSynced={!firestoreError}
+        onSyncNow={handleManualSync}
+        isSyncing={isSyncing}
       />
 
       {/* Main Content Dashboard */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 relative z-10">
         
-        {/* Firestore Connection Notice for personal project ba-bun */}
+        {/* Firestore Connection Notice */}
         {firestoreError && (
           <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4.5 shadow-sm text-xs text-slate-800 space-y-2.5 animate-fadeIn">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-black text-amber-950 text-sm">
                 <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-                <span>Status Sinkronisasi Cloud Firestore (Project: ba-bun)</span>
+                <span>Status Sinkronisasi Cloud Firestore</span>
               </div>
-              <button 
-                onClick={() => setFirestoreError(null)}
-                className="text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-amber-200/50 font-bold text-xs"
-              >
-                Tutup ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleManualSync}
+                  disabled={isSyncing}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isSyncing ? 'Menyinkronkan...' : 'Coba Sinkronkan Ulang'}</span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setFirestoreError(null)}
+                  className="text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-amber-200/50 font-bold text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
             <p className="text-slate-700 leading-relaxed font-medium">
-              Aplikasi terhubung ke Firebase pribadi Anda (<strong>ba-bun</strong>). 
-              <span className="text-emerald-800 font-bold block mt-1">✓ Seluruh data Anda tersimpan aman di penyimpanan lokal (browser cache) dan tidak akan hilang.</span>
+              Sistem Cloud Firestore mendeteksi penyesuaian: <span className="font-mono text-rose-800 bg-rose-50 px-1 py-0.5 rounded border border-rose-200">{firestoreError}</span>.
+              <span className="text-emerald-800 font-bold block mt-1">✓ Seluruh data Anda (permohonan, SPP, pagu DIPA, akun satker) tersimpan aman di penyimpanan lokal dan sinkronisasi otomatis tetap berjalan di latar belakang.</span>
             </p>
-            <div className="bg-slate-900 text-amber-300 font-mono text-[11px] p-3 rounded-xl border border-slate-800 space-y-1.5 shadow-inner">
-              <p className="text-slate-400 font-sans font-extrabold text-[10px] uppercase tracking-wider">Jika muncul kendala izin/koneksi pada project ba-bun:</p>
-              <p>1. Buka <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="underline text-amber-400 font-bold">console.firebase.google.com</a> → Pilih Project <strong>ba-bun</strong></p>
-              <p>2. Pastikan <strong>Firestore Database</strong> sudah dibuat (mode Test atau Production)</p>
-              <p>3. Di tab <strong>Rules</strong>, pastikan izin baca/tulis aktif (contoh: <code className="text-emerald-400">allow read, write: if true;</code>) lalu klik <strong>Publish</strong>.</p>
-            </div>
           </div>
         )}
 
@@ -869,6 +942,8 @@ export default function App() {
             submissions={submissions}
             currentRole={currentRole}
             currentUserSatker={satkerName}
+            paguMap={paguMap}
+            onOpenAdminPaguModal={currentRole === 'keuangan' ? () => setIsAdminPaguModalOpen(true) : undefined}
             onOpenSppModal={(item) => setSppModalItem(item)}
             onViewDetail={(item) => {
               if (currentRole === 'auditor') {
@@ -1013,6 +1088,18 @@ export default function App() {
         onToggleAccountStatus={handleToggleSatkerAccountStatus}
         onDeleteAccount={handleDeleteSatkerAccount}
       />
+
+      {/* Admin Pagu DIPA Anggaran Management Modal - Khusus Sub Bagian Keuangan */}
+      {currentRole === 'keuangan' && (
+        <AdminPaguModal
+          isOpen={isAdminPaguModalOpen}
+          onClose={() => setIsAdminPaguModalOpen(false)}
+          currentPaguMap={paguMap}
+          onSaveBatchPagu={handleSaveBatchPagu}
+          onSaveSinglePagu={handleSaveSinglePagu}
+          satkerList={satkerAccounts.map(a => a.satkerName)}
+        />
+      )}
 
       {/* Developer Promo Modal */}
       <SamkidPromoModal
