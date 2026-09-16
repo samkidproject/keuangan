@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { SubmissionItem, SatkerAccount, SatkerPagu } from '../types';
+import { DEFAULT_SATKER_PAGU } from '../data/defaultPagu';
 
 const SUBMISSIONS_COLLECTION = 'submissions';
 const ACCOUNTS_COLLECTION = 'satker_accounts';
@@ -233,16 +234,14 @@ export function subscribeToSatkerPagu(
       });
 
       if (snapshot.empty) {
-        // Automatically seed default DIPA pagu for all 17 Satkers into Firestore
-        import('../data/defaultPagu').then(({ DEFAULT_SATKER_PAGU }) => {
-          const items = DEFAULT_SATKER_PAGU.map(p => ({
-            satkerName: p.satkerName,
-            paguAnggaran: p.paguAnggaran,
-            keterangan: p.keterangan
-          }));
-          saveBatchSatkerPaguToFirestore(items, 'Sistem Auto-Seed').catch(err => {
-            console.warn('Auto-seed pagu in Firestore notice:', err);
-          });
+        // Automatically seed default DIPA pagu for all Satkers into Firestore
+        const items = DEFAULT_SATKER_PAGU.map(p => ({
+          satkerName: p.satkerName,
+          paguAnggaran: p.paguAnggaran,
+          keterangan: p.keterangan
+        }));
+        saveBatchSatkerPaguToFirestore(items, 'Sistem Auto-Seed').catch(err => {
+          console.warn('Auto-seed pagu in Firestore notice:', err);
         });
       }
 
